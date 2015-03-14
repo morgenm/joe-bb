@@ -88,6 +88,7 @@ struct options {
 	int	semi_comment;	/* Ignore text after ; comments */
 	int	tex_comment;	/* Ignore text after % comments */
 	int	hex;		/* Hex edit mode */
+	int	ansi;		/* Hide ansi sequences mode */
 	unsigned char *text_delimiters;	/* Define word delimiters */
 	unsigned char *cpara;	/* Characters which can indent paragraphcs */
 	MACRO	*mnew;		/* Macro to execute for new files */
@@ -119,12 +120,14 @@ struct buffer {
 	OPTIONS	o;		/* Options */
 	P	*oldcur;	/* Last cursor position before orphaning */
 	P	*oldtop;	/* Last top screen position before orphaning */
+	int shell_flag;		/* Set if last cursor position is same as vt cursor: if it is we keep it up to date */
 	int	rdonly;		/* Set for read-only */
 	int	internal;	/* Set for internal buffers */
 	int	scratch;	/* Set for scratch buffers */
 	int	er;		/* Error code when file was loaded */
 	pid_t	pid;		/* Process id */
 	int	out;		/* fd to write to process */
+	VT	*vt;		/* video terminal emulator */
 	struct lattr_db *db;	/* Linked list of line attribute databases */
 	void (*parseone)(struct charmap *map,unsigned char *s,unsigned char **rtn_name,
 	                 long *rtn_line);

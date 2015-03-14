@@ -224,6 +224,7 @@ static B *bmkchn(H *chn, B *prop, long amnt, long nlines)
 	b->orphan = 0;
 	b->oldcur = NULL;
 	b->oldtop = NULL;
+	b->shell_flag = 0;
 	b->backup = 1;
 	b->internal = 1;
 	b->scratch = 0;
@@ -262,6 +263,7 @@ static B *bmkchn(H *chn, B *prop, long amnt, long nlines)
 	b->eof->valcol = 0;
 	b->pid = 0;
 	b->out = -1;
+	b->vt = 0;
 	b->db = 0;
 	b->parseone = 0;
 	enquef(B, link, &bufs, b);
@@ -728,6 +730,14 @@ int pgetc(P *p)
 		if (c==NO_MORE_DATA)
 			return c;
 
+                if (p->b->o.ansi && c == '\033') { /* Hide ansi */
+                        while ((d = pgetb(p)) != NO_MORE_DATA)
+                                if ((d >= 'A' && d <= 'Z') || (d >= 'a' && d <= 'z'))
+                                        break;
+                        p->valcol = val;
+                        return c;
+                }
+
 		if ((c&0xE0)==0xC0) { /* Two bytes */
 			n = 1;
 			c &= 0x1F;
@@ -799,6 +809,13 @@ int pgetc(P *p)
 			++(p->line);
 			p->col = 0;
 			p->valcol = 1;
+                } else if (p->b->o.ansi && c == '\033') { /* Hide ansi */
+                        int d;
+                        int v = p->valcol;
+                        while ((d = pgetb(p)) != NO_MORE_DATA)
+                                if ((d >= 'A' && d <= 'Z') || (d >= 'a' && d <= 'z'))
+                                        break;
+                        p->valcol = v;
 		} else if (p->b->o.crlf && c == '\r') {
 			if (brc(p) == '\n')
 				return pgetc(p);
@@ -877,7 +894,7 @@ int prgetb(P *p)
 /* move p to the previous character (try to keep col updated) */
 int prgetc(P *p)
 {
-	if (p->b->o.charmap->type) {
+	if (p->b->o.charmap->type || p->b->o.ansi) {
 
 		if (pisbol(p))
 			return prgetb(p);
@@ -1013,7 +1030,7 @@ P *p_goto_indent(P *p, int c)
 /* move p to the end of line */
 P *p_goto_eol(P *p)
 {
-	if (p->b->o.crlf || p->b->o.charmap->type)
+	if (p->b->o.crlf || p->b->o.charmap->type || p->b->o.ansi)
 		while (!piseol(p))
 			pgetc(p);
 	else
@@ -1120,7 +1137,7 @@ P *pline(P *p, long line)
 P *pcol(P *p, long goalcol)
 {
 	p_goto_bol(p);
-	if(p->b->o.charmap->type) {
+	if(p->b->o.charmap->type || p->b->o.ansi) {
 		do {
 			int c;
 			int wid;
@@ -1192,7 +1209,7 @@ P *pcolwse(P *p, long goalcol)
 P *pcoli(P *p, long goalcol)
 {
 	p_goto_bol(p);
-	if (p->b->o.charmap->type) {
+	if (p->b->o.charmap->type || p->b->o.ansi) {
 		while (p->col < goalcol) {
 			int c;
 			c = brc(p);
@@ -2696,7 +2713,7 @@ B *borphan(void)
 	B *b;
 
 	for (b = bufs.link.next; b != &bufs; b = b->link.next)
-		if (b->orphan && !b->scratch) {
+		if (b->orphan && (!b->scratch || b->pid)) {
 			b->orphan = 0;
 			return b;
 		}
