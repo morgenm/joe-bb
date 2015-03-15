@@ -1,3 +1,124 @@
+
+Improvements:
+
+ 'parserr' leaving many copies of buffer?
+
+ It would be nice if ^G was goto instead of ESC space
+ Think through grep and compile.. maybe parse has to be progressive.
+ Maybe ^G parses just the line it's on and we give up on next-error /
+ previous-error?
+
+ Mode to start joe with shell window.
+
+ Save per-shell window current directory in joe state file?
+
+ Add magic joe command: append list of buffers.
+
+ Context help for shell window?
+
+ Would be nice if there was history for each virtual console.
+  BASH HISTFILE.
+
+ Need per-shell window current directory.
+  Logbuf?  Sometimes?
+
+ Esc sequences could be optimized out: delete one if it results in same
+ attributes that already exist.
+	Ugh...
+
+Bugs:
+
+ color on status line gets messed up when shell text is colored.. how can
+this even happen?
+
+ check querysave and nbuf/pbuf interactions with new buffer stack
+
+ clean up macro execute for magic shell commands:
+   only execute shell_ ones...
+   only execute if window is on screen...
+
+Pgetc() does not now always return a character... how to fix?
+	Ugh... (what bugs does is cause?)
+
+Hex mode probably doesn't mix correctly with vt
+
+
+- - - -
+
+ cursor in wrong position when I abort a window and shell window gets pulled
+on.. need EFIXXCOL, but joe crashes when I enable it for abort command.
+ abort a window and shell window replaces it:
+   cursor is wrong. we need EFFIXCOL on abort.. any others?
+  [fixed]
+
+ 'joe' in a shell window should edit a file.
+[done]
+
+[done: buffer stack]
+ Not sure about switching to orphan mode.. but how can we have F1.F4 without it?
+
+   If we keep orphan mode, make it more like regular joe:
+    Do better when hitting ^C.. pop back to previous buffer in window?  Keep
+    history list for this?
+
+    Trouble when we switch to orphan mode:
+	^K I does not put orphaned buffers on screen...
+	Have to get users used to ^[ u and ^[ v
+
+When you use grep in a buffer, you can parserr.. but grep output can be
+highlighted with escape sequences.. parserr includes them in the file names.
+	(done- you can now hit ESC SPACE in a shell window: would like it to
+be ^G.. also it would be nice buffer was parsed... maybe with progressive
+parsing?)
+
+Who owns keyboard, application or joe?
+	Usually we want it to work the old way..
+	It was nice when ` uparw actually worked..
+		(there is one sneaky way to make ` work the old way...  have
+		it mean quote only if it's the first thing in the read buffer)
+	(done- but check other rc files...)
+
+Need ^K ' to make a new window... (how to go to it? Have one for grep?
+Compile?)
+	We have F1 - F4
+		If you exit shell and hit F2 again it messes up... (need
+better way to detect it's a shell window- filename compare, perhaps).
+
+Note: termcap emulation functions are gone from curses..
+	No, ncurses-devel was missing on ubuntu..
+
+Think more about keeping cursor in sync: from shell window, edit file, ^C,
+we're back in shell window but cursor is in the wrong place.
+ [fixed- we were not keeping cursor up to date in orphan windows]
+
+nbuf/pbuf do not call resize, so swapping in a shell window is not properly resized.
+ [seems to be fixed, but not sure where resize is getting called..]
+
+multiple windows open on one shell window is kind of broken (you get
+conflicting resize events from each of them).  There should be a concept
+of the master window.
+ [fixed, we use the last one]
+
+Even then, a window should only be a master if the cursor matches the vt
+cursor.  This helps with the problem of closing a window and switching to
+another where cursor is far away.
+
+  - using vtmaster to pick one to be the master...
+     - how to switch it (for example if a window is closed)? maybe overall screen refresh has to watch for this?
+
+Need raw mode which works the old way.. (mostly for debugging joe..)
+  [done]
+
+Resize needs more testing.  Resize with 'man ls' not quite working.
+Weird things will happen with multiple window with synchronized cursors.
+   [fixed- was due to scrolling region not being resized]
+
+Resize not working when you kill other window?
+ [seems to be ok]
+
+^K V should jump to vt cursor... (done)
+- - - -
+
 For JOE-3.6
 
 	auto reload of modified files?  a mode for this?

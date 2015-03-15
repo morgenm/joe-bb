@@ -353,12 +353,6 @@ void wfit(Screen *t)
 	w = t->topwin;
 	do {
 		if (w->ny >= 0) {
-			if (w->object) {
-				if (w->watom->move)
-					w->watom->move(w->object, w->x, w->ny);
-				if (w->watom->resize)
-					w->watom->resize(w->object, w->w, w->nh);
-			}
 			if (w->y == -1) {
 				msetI(t->t->updtab + w->ny, 1, w->nh);
 			}
@@ -367,6 +361,20 @@ void wfit(Screen *t)
 			w->y = -1;
 		w->h = w->nh;
 		w->reqh = 0;
+		w = w->link.next;
+	} while (w != t->topwin);
+
+	/* Call move and resize in a second pass so that they see valid positions for all windows */
+	w = t->topwin;
+	do {
+		if (w->y >= 0) {
+			if (w->object) {
+				if (w->watom->move)
+					w->watom->move(w->object, w->x, w->y);
+				if (w->watom->resize)
+					w->watom->resize(w->object, w->w, w->h);
+			}
+		}
 		w = w->link.next;
 	} while (w != t->topwin);
 }
@@ -588,6 +596,7 @@ W *wcreate(Screen *t, WATOM *watom, W *where, W *target, W *original, int height
 	new->object = NULL;
 	new->msgb = NULL;
 	new->msgt = NULL;
+	new->bstack = 0;
 	/* Set window's target and family */
 /* was:	if (new->win = target) {	which may be mistyped == */
 	if ((new->win = target) != NULL) {	/* A subwindow */
@@ -860,9 +869,9 @@ int umfit(BW *bw)
 		return -1;
 	}
 	/* Request size */
-	if (p->t->h - 6 < 3)
+	if ((p->t->h >> 1) < 3) /* -6 */
 		return -1;
-	seth(p, p->t->h - 6);
+	seth(p, (p->t->h >> 1)); /* -6 */
 	t->topwin = p;
 	t->curwin = p;
 	/* Fit them on the screen */

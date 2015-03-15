@@ -677,6 +677,19 @@ int doedit(BW *bw, unsigned char *s, void *obj, int *notify)
 		return doedit1(bw, YES_CODE, s, notify);
 }
 
+int dosetcd(BW *bw, unsigned char *s, void *obj, int *notify)
+{
+	if (notify) {
+		*notify = 1;
+	}
+	if (s[0])
+		set_current_dir(s, 1);
+	joe_snprintf_1(msgbuf, JOE_MSGBUFSIZE, joe_gettext(_("Directory prefix set to %s")), s);
+	msgnw(bw->parent, msgbuf);
+	vsrm(s);
+	return 0;
+}
+
 int okrepl(BW *bw)
 {
 	if (bw->b->count == 1 && bw->b->changed) {
@@ -690,6 +703,15 @@ int okrepl(BW *bw)
 int uedit(BW *bw)
 {
 	if (wmkpw(bw->parent, joe_gettext(_("Name of file to edit (^C to abort): ")), &filehist, doedit, USTR "Names", NULL, cmplt, NULL, NULL, locale_map,7)) {
+		return 0;
+	} else {
+		return -1;
+	}
+}
+
+int usetcd(BW *bw)
+{
+	if (wmkpw(bw->parent, joe_gettext(_("Set current directory (^C to abort): ")), &filehist, dosetcd, USTR "Names", NULL, cmplt, NULL, NULL, locale_map,7)) {
 		return 0;
 	} else {
 		return -1;
@@ -711,6 +733,20 @@ int uswitch(BW *bw)
 	}
 }
 
+void wpush(BW *bw)
+{
+	struct bstack *e;
+	e = (struct bstack *)malloc(sizeof(struct bstack));
+	e->b = bw->b;
+	++bw->b->count;
+	e->cursor = 0;
+	e->top = 0;
+	pdupown(bw->cursor, &e->cursor, USTR "wpush");
+	pdupown(bw->top, &e->top, USTR "wpush");
+	e->next = bw->parent->bstack;
+	bw->parent->bstack = e;
+}
+
 int doscratch(BW *bw, unsigned char *s, void *obj, int *notify)
 {
 	int ret = 0;
@@ -725,8 +761,12 @@ int doscratch(BW *bw, unsigned char *s, void *obj, int *notify)
 
 	b = bfind_scratch(s);
 	er = berror;
-	if (bw->b->count == 1 && (bw->b->changed || bw->b->name)) {
-		if (orphan) {
+
+	if (!bw->b->scratch)
+		wpush(bw);
+
+	if (bw->b->count == 1 && (bw->b->changed || bw->b->name)) { /* Last reference on dirty buffer */
+		if (orphan || bw->b->scratch) {
 			orphit(bw);
 		} else {
 			if (uduptw(bw)) {
