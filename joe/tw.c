@@ -410,7 +410,10 @@ unsigned char *duplicate_backslashes(unsigned char *s, int len)
 				break;
 			case 'S':
 				if (bw->b->pid)
-					stalin = vsncpy(sv(stalin), sz(joe_gettext(_("*SHELL*"))));
+					if (bw == vtmaster(maint, bw->b))
+						stalin = vsncpy(sv(stalin), sz(joe_gettext(_("*SHELLM*"))));
+					else
+						stalin = vsncpy(sv(stalin), sz(joe_gettext(_("*SHELL*"))));
 				break;
 			case 'M':
 				if (recmac) {
@@ -506,7 +509,7 @@ int usplitw(BW *bw)
 	new = wcreate(w->t, w->watom, findbotw(w), NULL, w, newh / 2 + (newh & 1), NULL, NULL);
 	if (!new)
 		return -1;
-	wfit(new->t);
+//	wfit(new->t);
 	new->object = (void *) (newbw = bwmk(new, bw->b, 0));
 	++bw->b->count;
 	newbw->offset = bw->offset;
@@ -516,6 +519,7 @@ int usplitw(BW *bw)
 	pset(newbw->cursor, bw->cursor);
 	newbw->cursor->xcol = bw->cursor->xcol;
 	new->t->curwin = new;
+	wfit(new->t);
 	return 0;
 }
 
@@ -595,6 +599,8 @@ int abortit(BW *bw)
 			w->object = (void *) (bw = bwmk(w, b, 0));
 			wredraw(bw->parent);
 			bw->object = object;
+			bw = (BW *)w->object;
+			bw->cursor->xcol = piscol(bw->cursor);
 			return 0;
 		}
 	bwrm(bw);
@@ -629,6 +635,21 @@ static int naborttw1(BW *bw, int k, void *object, int *notify)
 	return abortit(bw);
 }
 
+B *wpop(BW *bw)
+{
+	B *b;
+	struct bstack *e = bw->parent->bstack;
+	b = e->b;
+	if (b->oldcur) prm(b->oldcur);
+	if (b->oldtop) prm(b->oldtop);
+	b->oldcur = e->cursor;
+	b->oldtop = e->top;
+	bw->parent->bstack = e->next;
+	free(e);
+	--b->count;
+	return b;
+}
+
 /* k is last character types which lead to uabort.  If k is -1, it means uabort
    was called internally, and not by the user: which means uabort will not send
    Ctrl-C to process */
@@ -636,6 +657,15 @@ int uabort(BW *bw, int k)
 {
 	if (bw->parent->watom != &watomtw)
 		return wabort(bw->parent);
+	if (bw->parent->bstack) {
+		int rtn;
+		B *b = wpop(bw);
+		W *w = bw->parent;
+		rtn = get_buffer_in_window(bw, b);
+		bw = (BW *)w->object;
+		bw->cursor->xcol = piscol(bw->cursor);
+		return rtn;
+	}
 	if (bw->b->pid && bw->b->count==1)
 		return ukillpid(bw);
 	if (bw->b->changed && bw->b->count == 1 && !bw->b->scratch)

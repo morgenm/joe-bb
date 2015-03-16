@@ -158,6 +158,7 @@ OPTIONS pdefault = {
 	0,		/* semi_comment */
 	0,		/* tex_comment */
 	0,		/* hex */
+	0,		/* hide ansi */
 	NULL,		/* text_delimiters */
 	NULL,		/* Characters which can indent paragraphs */
 	NULL,		/* macro to execute for new files */
@@ -216,6 +217,7 @@ OPTIONS fdefault = {
 	0,		/* semi_comment */
 	0,		/* tex_comment */
 	0,		/* hex */
+	0,		/* hide ansi */
 	NULL,		/* text_delimiters */
 	USTR ">;!#%/",	/* Characters which can indent paragraphs */
 	NULL, NULL, NULL, NULL, NULL	/* macros (see above) */
@@ -321,6 +323,7 @@ struct glopts {
 } glopts[] = {
 	{USTR "overwrite",4, NULL, (unsigned char *) &fdefault.overtype, USTR _("Overtype mode"), USTR _("Insert mode"), USTR _("T Overtype ") },
 	{USTR "hex",4, NULL, (unsigned char *) &fdefault.hex, USTR _("Hex edit mode"), USTR _("Text edit mode"), USTR _("  Hex edit mode ") },
+	{USTR "ansi",4, NULL, (unsigned char *) &fdefault.ansi, USTR _("Hide ANSI sequences"), USTR _("Reveal ANSI sequences"), USTR _("  Hide ANSI mode ") },
 	{USTR "autoindent",	4, NULL, (unsigned char *) &fdefault.autoindent, USTR _("Autoindent enabled"), USTR _("Autoindent disabled"), USTR _("I Autoindent ") },
 	{USTR "wordwrap",	4, NULL, (unsigned char *) &fdefault.wordwrap, USTR _("Wordwrap enabled"), USTR _("Wordwrap disabled"), USTR _("W Word wrap ") },
 	{USTR "tab",	5, NULL, (unsigned char *) &fdefault.tab, USTR _("Tab width (%d): "), 0, USTR _("D Tab width "), 0, 1, 64 },
@@ -590,7 +593,7 @@ int glopt(unsigned char *s, unsigned char *arg, OPTIONS *options, int set)
 				int sta;
 
 				if (options)
-					options->mnew = mparse(NULL, arg, &sta);
+					options->mnew = mparse(NULL, arg, &sta, 0);
 				ret = 2;
 			} else
 				ret = 1;
@@ -599,7 +602,7 @@ int glopt(unsigned char *s, unsigned char *arg, OPTIONS *options, int set)
 				int sta;
 
 				if (options)
-					options->mfirst = mparse(NULL, arg, &sta);
+					options->mfirst = mparse(NULL, arg, &sta, 0);
 				ret = 2;
 			} else
 				ret = 1;
@@ -608,7 +611,7 @@ int glopt(unsigned char *s, unsigned char *arg, OPTIONS *options, int set)
 				int sta;
 
 				if (options)
-					options->mold = mparse(NULL, arg, &sta);
+					options->mold = mparse(NULL, arg, &sta, 0);
 				ret = 2;
 			} else
 				ret = 1;
@@ -617,7 +620,7 @@ int glopt(unsigned char *s, unsigned char *arg, OPTIONS *options, int set)
 				int sta;
 
 				if (options)
-					options->msnew = mparse(NULL, arg, &sta);
+					options->msnew = mparse(NULL, arg, &sta, 0);
 				ret = 2;
 			} else
 				ret = 1;
@@ -626,7 +629,7 @@ int glopt(unsigned char *s, unsigned char *arg, OPTIONS *options, int set)
 				int sta;
 
 				if (options)
-					options->msold = mparse(NULL, arg, &sta);
+					options->msold = mparse(NULL, arg, &sta, 0);
 				ret = 2;
 			} else
 				ret = 1;
@@ -1406,7 +1409,7 @@ int procrc(CAP *cap, unsigned char *name)
 							MACRO *m;
 
 							if (joe_isblank(locale_map,c)
-							    && (m = mparse(NULL, buf + y + 1, &sta)))
+							    && (m = mparse(NULL, buf + y + 1, &sta, 0)))
 								addcmd(buf + x, m);
 							else {
 								err = 1;
@@ -1522,7 +1525,7 @@ int procrc(CAP *cap, unsigned char *name)
 
 				m = 0;
 			      macroloop:
-				m = mparse(m, buf, &x);
+				m = mparse(m, buf, &x, 0);
 				if (x == -1) {
 					err = 1;
 					logerror_2((char *)joe_gettext(_("%s %d: Unknown command in macro\n")), name, line);
