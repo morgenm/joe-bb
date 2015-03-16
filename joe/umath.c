@@ -96,7 +96,7 @@ static double expr(int prec, int en,struct var **rtv)
 				} else
 					*q++ = 0;
 				if (en) {
-					m = mparse(NULL,ptr,&sta);
+					m = mparse(NULL,ptr,&sta,0);
 					ptr = q;
 					if (m) {
 						x = !exmacro(m,1);
@@ -834,6 +834,10 @@ double calc(BW *bw, unsigned char *s)
 	v->set = 1;
 	v = get(USTR "no_windows");
 	v->val = countmain(bw->parent->t);
+	v->set = 1;
+	merr = 0;
+	v = get(USTR "is_shell");
+	v->val = tbw->b->pid;
 	v->set = 1;
 	merr = 0;
 	return eval(s);
