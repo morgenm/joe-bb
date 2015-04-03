@@ -100,6 +100,9 @@ static void doundo(BW *bw, UNDOREC *ptr)
 	if (bw->b->changed && !ptr->changed)
 		bw_unlock(bw);
 	bw->b->changed = ptr->changed;
+#ifdef JOEWIN
+	notify_changed_buffer(bw->b);
+#endif
 }
 
 int uundo(BW *bw)
@@ -447,6 +450,9 @@ int unotmod(BW *bw)
 	bw_unlock(bw);
 	bw->b->changed = 0;
 	msgnw(bw->parent, joe_gettext(_("Modified flag cleared")));
+#ifdef JOEWIN
+	notify_changed_buffer(bw->b);
+#endif
 	return 0;
 }
 

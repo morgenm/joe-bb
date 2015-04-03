@@ -181,13 +181,12 @@ static void cdata(B *b, unsigned char *dat, int siz)
 		prm(r);
 		prm(q);
 		cfollow(b, NULL, b->eof->byte);
-		undomark();
 	}
 }
 
 int cstart(BW *bw, unsigned char *name, unsigned char **s, void *obj, int build, int out_only, unsigned char *first_command, int vt)
 {
-#ifdef __MSDOS__
+#if defined(__MSDOS__)
 	varm(s);
 	msgnw(bw->parent, joe_gettext(_("Sorry, no sub-processes in DOS (yet)")));
 	return -1;
@@ -240,8 +239,10 @@ static int dobknd(BW *bw, int vt)
 	unsigned char **a;
 	unsigned char *s;
         unsigned char *sh;
+#ifndef JOEWIN
 	unsigned char start_sh[] = ". " JOERC "shell.sh\n";
 	unsigned char start_csh[] = "source " JOERC "shell.csh\n";
+#endif
 
         if (!modify_logic(bw,bw->b))
         	return -1;
@@ -261,9 +262,15 @@ static int dobknd(BW *bw, int vt)
 	vaperm(a);
 	s = vsncpy(NULL, 0, sz(sh));
 	a = vaadd(a, s);
+#ifndef JOEWIN
 	s = vsncpy(NULL, 0, sc("-i"));
 	a = vaadd(a, s);
 	return cstart(bw, sh, a, NULL, 0, 0, (vt ? (zstr(sh, USTR "csh") ? start_csh : start_sh) : NULL), vt);
+#else
+	s = vsncpy(NULL, 0, sc("/Q"));
+	a = vaadd(a, s);
+	return cstart(bw, sh, a, NULL, 0, 0, NULL, vt);
+#endif
 }
 
 /* Start ANSI shell */
@@ -288,6 +295,30 @@ int ubknd(BW *bw)
 	return dobknd(bw, 0);
 }
 
+/* Get the shell and command line argument to execute another program */
+
+static unsigned char **getshell()
+{
+	unsigned char **a;
+	unsigned char *cmd;
+
+	a = vamk(10);
+	
+#ifndef JOEWIN
+	cmd = vsncpy(NULL, 0, sc("/bin/sh"));
+	a = vaadd(a, cmd);
+	cmd = vsncpy(NULL, 0, sc("-c"));
+	a = vaadd(a, cmd);
+#else
+	cmd = vsncpy(NULL, 0, sz(USTR getenv("SHELL")));
+	a = vaadd(a, cmd);
+	cmd = vsncpy(NULL, 0, sc("/C"));
+	a = vaadd(a, cmd);
+#endif
+
+	return a;
+}
+
 /* Run a program in a window */
 
 B *runhist = NULL;
@@ -299,19 +330,13 @@ int urun(BW *bw)
 
 	if (s) {
 		unsigned char **a;
-		unsigned char *cmd;
 
 		if (!modify_logic(bw,bw->b))
 			return -1;
 
-		a = vamk(10);
-		cmd = vsncpy(NULL, 0, sc("/bin/sh"));
-
-		a = vaadd(a, cmd);
-		cmd = vsncpy(NULL, 0, sc("-c"));
-		a = vaadd(a, cmd);
+		a = getshell();
 		a = vaadd(a, s);
-		return cstart(bw, USTR "/bin/sh", a, NULL, 0, 0, NULL, 0);
+		return cstart(bw, a[0], a, NULL, 0, 0, NULL, 0);
 	} else {
 		return -1;
 	}
@@ -332,14 +357,11 @@ int ubuild(BW *bw)
 	/* "file prompt" was set for this... */
 	s = ask(bw->parent, s, &buildhist, USTR "Run", utypebw, locale_map, 0, prev, NULL);
 	if (s) {
-		unsigned char **a = vamk(10);
-		unsigned char *cmd = vsncpy(NULL, 0, sc("/bin/sh"));
+		unsigned char **a;
 
-		a = vaadd(a, cmd);
-		cmd = vsncpy(NULL, 0, sc("-c"));
-		a = vaadd(a, cmd);
+		a = getshell();
 		a = vaadd(a, s);
-		return cstart(bw, USTR "/bin/sh", a, NULL, 1, 0, NULL, 0);
+		return cstart(bw, a[0], a, NULL, 1, 0, NULL, 0);
 	} else {
 		return -1;
 	}
@@ -360,14 +382,11 @@ int ugrep(BW *bw)
 	/* "file prompt" was set for this... */
 	s = ask(bw->parent, s, &grephist, USTR "Run", utypebw, locale_map, 0, prev, NULL);
 	if (s) {
-		unsigned char **a = vamk(10);
-		unsigned char *cmd = vsncpy(NULL, 0, sc("/bin/sh"));
+		unsigned char **a;
 
-		a = vaadd(a, cmd);
-		cmd = vsncpy(NULL, 0, sc("-c"));
-		a = vaadd(a, cmd);
+		a = getshell();
 		a = vaadd(a, s);
-		return cstart(bw, USTR "/bin/sh", a, NULL, 1, 0, NULL, 0);
+		return cstart(bw, a[0], a, NULL, 1, 0, NULL, 0);
 	} else {
 		return -1;
 	}
@@ -380,7 +399,7 @@ int ukillpid(BW *bw)
 	if (bw->b->pid) {
 		int c = query(bw->parent, sz(joe_gettext(_("Kill program (y,n,^C)?"))), 0);
 		if (bw->b->pid && (c == YES_CODE || yncheck(yes_key, c)))
-			kill(bw->b->pid, 1);
+			killmpx(bw->b->pid, 1);
 		return -1;
 	} else {
 		return 0;

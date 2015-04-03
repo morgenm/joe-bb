@@ -1302,3 +1302,13 @@ void mpxdied(MPX *m)
 	close(m->ackfd);
 	edupd(1);
 }
+
+void killmpx(int pid, int sig)
+{
+        kill(pid, sig);
+}
+
+int writempx(int fd, void *data, size_t amt)
+{
+        return joe_write(fd, data, amt);
+}

@@ -11,6 +11,11 @@
 #include <gpm.h>
 #endif
 
+#ifdef JOEWIN
+#include "jwcomm.h"
+#include "jwversion.h"
+#endif
+
 unsigned char *exmsg = NULL;		/* Message to display when exiting the editor */
 int usexmouse=0;
 int xmouse=0;
@@ -252,6 +257,9 @@ void internal_msg(unsigned char *s)
 	P *t = pdup(startup_log->eof, USTR "internal_msg");
 	binss(t, s);
 	prm(t);
+#if defined(JOEWIN) && defined(DEBUG)
+	OutputDebugStringA((LPSTR)s);
+#endif
 }
 
 void setlogerrs(void)
@@ -303,13 +311,12 @@ int joerc()
 	unsigned char *s;
 	unsigned char *t;
 	unsigned char *run;
-#ifdef __MSDOS__
+#if defined(__MSDOS__) || defined(JOEWIN)
 	unsigned char *rundir;
 #endif
 	
 	/* Figure out name editor was invoked under */
-
-#ifdef __MSDOS__
+#if defined(__MSDOS__) || defined(JOEWIN)
 	_fmode = O_BINARY;
 	s = vscpyz(NULL, argv[0]);
 	joesep(s);
@@ -349,7 +356,12 @@ int joerc()
 	/* Name of system joerc file.  Try to find one with matching language... */
 	
 	/* Try full language: like joerc.de_DE */
+#ifdef JOEWIN
+	/* Windows port stores configuration files underneath 'conf' directory in same location as exe */
+	t = vsncpy(NULL, 0, sz(JOERC));
+#else
 	t = vsncpy(NULL, 0, sc(JOERC));
+#endif
 	t = vsncpy(sv(t), sv(run));
 	t = vsncpy(sv(t), sc("rc."));
 	t = vsncpy(sv(t), sz(locale_msgs));
@@ -358,7 +370,11 @@ int joerc()
 	else {
 		/* Try generic language: like joerc.de */
 		if (locale_msgs[0] && locale_msgs[1] && locale_msgs[2]=='_') {
+#ifdef JOEWIN
+			t = vsncpy(NULL, 0, sz(JOERC));
+#else
 			t = vsncpy(NULL, 0, sc(JOERC));
+#endif
 			t = vsncpy(sv(t), sv(run));
 			t = vsncpy(sv(t), sc("rc."));
 			t = vsncpy(sv(t), locale_msgs, 2);
@@ -369,7 +385,11 @@ int joerc()
 		} else {
 			nope:
 			/* Try Joe's bad english */
+#ifdef JOEWIN
+			t = vsncpy(NULL, 0, sz(JOERC));
+#else
 			t = vsncpy(NULL, 0, sc(JOERC));
+#endif
 			t = vsncpy(sv(t), sv(run));
 			t = vsncpy(sv(t), sc("rc"));
 			if (!stat((char *)t,&sbuf))
@@ -383,7 +403,12 @@ int joerc()
 	s = (unsigned char *)getenv("HOME");
 	if (s) {
 		s = vsncpy(NULL, 0, sz(s));
+#ifndef JOEWIN
 		s = vsncpy(sv(s), sc("/."));
+#else
+		/* No dot-names in Windows */
+		s = vsncpy(sv(s), sc("\\"));
+#endif
 		s = vsncpy(sv(s), sv(run));
 		s = vsncpy(sv(s), sc("rc"));
 
@@ -471,9 +496,13 @@ void setup_mouse()
 {
 	unsigned char *s;
 
+#ifndef JOEWIN
 	/* initialize mouse support */
 	if (xmouse && (s=(unsigned char *)getenv("TERM")) && strstr((char *)s,"xterm"))
 		usexmouse=1;
+#else
+	usexmouse = xmouse;
+#endif
 }
 
 void process_global_options()
@@ -606,6 +635,9 @@ void process_args()
 	}
 	/* Set window with cursor to first window on screen */
 	maint->curwin = maint->topwin;
+#ifdef JOEWIN
+	notify_selection();
+#endif
 }
 
 /* Show startup log if there were any messages */
@@ -618,6 +650,9 @@ void show_startup_log()
 		copied->name = zdup(startup_log->name);
 		copied->internal = 1;
 		maint->curwin = bw->parent;
+#ifdef JOEWIN
+		notify_selection();
+#endif
 		wshowall(maint);
 	}
 }
@@ -645,7 +680,11 @@ SCRN *main_scrn;
 
 unsigned char *startup_gc;
 
+#ifdef JOEWIN
+int joe_main(int argc, char **real_argv, char **envv)
+#else
 int main(int argc, char **real_argv, char **envv)
+#endif
 {
 	/* Save arguments */
 	argv = (unsigned char **)real_argv;
@@ -672,12 +711,10 @@ int main(int argc, char **real_argv, char **envv)
 	process_env();
 
 	/* Try to get termcap entry before we get too far */
-#ifndef __MSDOS__
 	if (!(cap = getcap(NULL, 9600, NULL, NULL))) {
 		fprintf(stderr, (char *)joe_gettext(_("Couldn't load termcap/terminfo entry\n")));
 		goto exit_errors;
 	}
-#endif
 
 	/* Process JOERC file */
 	if (joerc()) 
@@ -692,11 +729,13 @@ int main(int argc, char **real_argv, char **envv)
 
 	shell_kbd = mkkbd(kmap_getcontext(USTR "shell"));
 
+#ifndef JOEWIN
 	/* Is somebody piping something into JOE, or is stdin the tty? */
 	if (!isatty(fileno(stdin)))
 		/* If stdin is not /dev/tty, set flag so that
 		   nopen opens /dev/tty instead of using stdin/stdout */
 		idleout = 0;
+#endif
 
 	/* First scan of argv: process global options on command line */
 	process_global_options();
@@ -729,7 +768,11 @@ int main(int argc, char **real_argv, char **envv)
 	/* Display startup message unless disabled by global option */
 	if (!nonotice) {
 		msgnw(((BASE *)lastw(maint)->object)->parent,
+#ifndef JOEWIN
 		  vsfmt(NULL, 0, joe_gettext(_("\\i** Joe's Own Editor v%s ** (%s) ** Copyright %s 2015 **\\i")),VERSION,locale_map->name,(locale_map->type ? "©" : "(C)")));
+#else
+		  USTR("\\i" JW_VERSION_BANNER "\\i"));
+#endif
 	}
 
 	/* Setup reading in from stdin to first window if something was
@@ -738,6 +781,11 @@ int main(int argc, char **real_argv, char **envv)
 
 	/* Clean up startup gargbage */
 	obj_free(startup_gc);
+
+#ifdef JOEWIN
+	/* Rendezvous.  Wait until the UI end is ready before we get going. */
+	jwRendezvous(JW_TO_EDITOR, JW_TO_UI);
+#endif
 
 	/* Run the editor */
 	edloop();

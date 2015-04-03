@@ -7,9 +7,6 @@
  */
 #include "types.h"
 
-#define HEX_RESTORE_UTF8	2
-#define HEX_RESTORE_CRLF	4
-
 /* Commands which just type in variable values */
 
 int ucharset(BW *bw)
@@ -310,7 +307,7 @@ void setopt(B *b, unsigned char *parsed_name)
 		pieces[x] = NULL;
 
 	for (o = options; o; o = o->next)
-		if (rmatch(o->name_regex, parsed_name)) {
+		if (rmatch(o->name_regex, parsed_name, 0)) {
 			if(o->contents_regex) {
 				P *p = pdup(b->bof, USTR "setopt");
 				if (pmatch(pieces,o->contents_regex,zlen(o->contents_regex),p,0,0)) {
@@ -750,7 +747,7 @@ static int syntaxcmplt(BW *bw)
 
 		syntmp = vamk(1);
 
-		if (!chpwd(USTR JOEDATA "syntax") && (t = rexpnd(USTR "*.jsf"))) {
+		if (!chpwd(USTR JOEDATA_PLUS("syntax")) && (t = rexpnd(USTR "*.jsf"))) {
 			for (x = 0; x != valen(t); ++x) {
 				unsigned char *r = vsncpy(NULL,0,t[x],(unsigned char *)strrchr((char *)(t[x]),'.')-t[x]);
 				syntmp = vaadd(syntmp,r);
@@ -759,7 +756,11 @@ static int syntaxcmplt(BW *bw)
 
 		p = (unsigned char *)getenv("HOME");
 		if (p) {
+#ifndef JOEWIN
 			unsigned char *buf = vsfmt(NULL, 0, USTR "%s/.joe/syntax",p);
+#else
+			unsigned char *buf = vsfmt(NULL, 0, USTR "%s\\syntax",p);
+#endif
 
 			if (!chpwd(buf) && (t = rexpnd(USTR "*.jsf"))) {
 				for (x = 0; x != valen(t); ++x)
@@ -1374,19 +1375,23 @@ int procrc(CAP *cap, unsigned char *name)
 							unsigned char *bf = 0;
 							unsigned char *p = (unsigned char *)getenv("HOME");
 							int rtn = -1;
-							if (p && buf[x] != '/') {
+							if (p && !ISDIRSEP(buf[x])) {
+#ifndef JOEWIN
 								bf = vsfmt(bf, 0, USTR "%s/.joe/%s",p,buf + x);
+#else
+								bf = vsfmt(bf, 0, USTR "%s\\%s",p,buf + x);
+#endif
 								rtn = procrc(cap, bf);
 							}
-							if (rtn == -1 && buf[x] != '/') {
+							if (rtn == -1 && !ISDIRSEP(buf[x])) {
 								bf = vsfmt(bf, 0, USTR "%s%s",JOERC,buf + x);
 								rtn = procrc(cap, bf);
 							}
-							if (rtn == -1 && buf[x] != '/') {
-								bf = vsfmt(bf, 0, USTR "*%s",buf + x);
+							if (rtn == -1 && !ISDIRSEP(buf[x])) {
+								bf = vsfmt(bf, 0, USTR "*%s", buf + x);
 								rtn = procrc(cap, bf);
 							}
-							if (rtn == -1 && buf[x] == '/') {
+							if (rtn == -1 && !ISDIRSEP(buf[x])) {
 								bf = vsfmt(bf, 0, USTR "%s",buf + x);
 								rtn = procrc(cap, bf);
 							}
@@ -1563,7 +1568,12 @@ void save_state()
 		return;
 	if (!path)
 		return;
+#ifndef JOEWIN
 	path = vsfmt(NULL,0,USTR "%s/.joe_state",path);
+#else
+	/* No dot-files in Windows */
+	path = vsfmt(NULL,0,USTR "%s\\joe_state",path);
+#endif
 	old_mask = umask(0066);
 	f = fopen((char *)path,"w");
 	umask(old_mask);
@@ -1600,7 +1610,12 @@ void load_state()
 		return;
 	if (!path)
 		return;
+#ifndef JOEWIN
 	path = vsfmt(NULL,0,USTR "%s/.joe_state",path);
+#else
+	/* No dotfiles in Windows */
+	path = vsfmt(NULL,0,USTR "%s\\joe_state",path);
+#endif
 	f = fopen((char *)path,"r");
 	if(!f)
 		return;
