@@ -43,7 +43,7 @@ extern void *ITEM; /* Temporary global variable (from queue.c) */
 
 /* Allocate item from free-list.  If free-list empty, replenish it. */
 
-void *replenish(void **list,int size);
+void *replenish(void **list,size_t size);
 
 #define al_single(list,type) ( \
 	(ITEM = *(void **)(list)) ? \
@@ -78,7 +78,7 @@ struct zs {
 	gc_add(&gc, &(var), rm_zs); \
 } while(0)
 
-ZS raw_mk_zs(GC **gc,unsigned char *s,int len);
+ZS raw_mk_zs(GC **gc,unsigned char *s,size_t len);
 
 /* Destructor for zs */
 
@@ -141,7 +141,7 @@ int joe_set_signal(int signum, sighandler_t handler);
 
 /* Simple parsers */
 int parse_ws(unsigned char **p,int cmt);
-int parse_ident(unsigned char **p,unsigned char *buf,int len);
+int parse_ident(unsigned char **p,unsigned char *buf,size_t len);
 int parse_kw(unsigned char **p,unsigned char *kw);
 long parse_num(unsigned char **p);
 int parse_tows(unsigned char **p,unsigned char *buf);
@@ -149,8 +149,8 @@ int parse_field(unsigned char **p,unsigned char *field);
 int parse_char(unsigned char  **p,unsigned char c);
 int parse_int(unsigned char **p,int *buf);
 int parse_long(unsigned char **p,long  *buf);
-int parse_string(unsigned char **p,unsigned char *buf,int len);
+ssize_t parse_string(unsigned char **p,unsigned char *buf,size_t len);
 int parse_range(unsigned char **p,int *first,int *second);
-void emit_string(FILE *f,unsigned char *s,int len);
+void emit_string(FILE *f,unsigned char *s,size_t len);
 
 #endif
