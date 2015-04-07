@@ -57,76 +57,46 @@ void add_menu_entry(struct rc_menu *menu, unsigned char *entry_name, MACRO *m)
 	menu->entries[menu->size - 1] = e;
 }
 
-/* When user hits backspace */
-
-static int backsmenu(MENU *m, int x, struct menu_instance *mi)
-{
-	struct rc_menu *menu = mi->menu;
-	int *notify = m->parent->notify;
-	if (notify)
-		*notify = 1;
-	wabort(m->parent);
-	if (menu->backs)
-		return exmacro(menu->backs, 1);
-	else
-		return 0;
-}
-
-static int doabrt(MENU *m, int x, struct menu_instance *mi)
-{
-	mi->menu->last_position = x;
-	for (x = 0; mi->s[x]; ++x)
-		vsrm(mi->s[x]);
-		/* joe_free(mi->s[x]); */
-	joe_free(mi->s);
-	joe_free(mi);
-	return -1;
-}
-
-/* When user selects a menu entry */
-
 int menu_flg; /* Record of key used to select menu entry */
-
-static int execmenu(MENU *m, int x, struct menu_instance *mi, int flg)
-{
-	struct rc_menu *menu = mi->menu;
-	int *notify = m->parent->notify;
-	if (notify)
-		*notify = 1;
-	wabort(m->parent);
-	menu_flg = flg; /* Hack to pass key to umode command */
-	return exmacro(menu->entries[x]->m, 1);
-}
 
 /* Display macro menu if it exists */
 
-static int display_menu(BW *bw, struct rc_menu *menu, int *notify)
+int display_menu(BW *bw, struct rc_menu *menu)
 {
-	struct menu_instance *m = (struct menu_instance *)joe_malloc(sizeof(struct menu_instance));
-	unsigned char **s = (unsigned char **)joe_malloc(sizeof(unsigned char *) * (menu->size + 1));
+	unsigned char **s = vamk(20);
 	int x;
+	
 	for (x = 0; x != menu->size; ++x) {
-		s[x] = stagen(NULL, bw, menu->entries[x]->name, ' ');
+		s = vaadd(s, stagen(NULL, bw, menu->entries[x]->name, ' '));
 	}
-	s[x] = 0;
-	m->menu = menu;
-	m->s = s;
-	if (mkmenu(bw->parent, bw->parent, m->s, execmenu, doabrt, backsmenu, menu->last_position, m, notify))
-		return 0;
-	else
+	
+	x = choose(bw->parent, bw->parent, s, &menu->last_position);
+	if (x == -1) {
+		/* Abort */
 		return -1;
+	} else if (x == 3) {
+		/* Backspace */
+		if (menu->backs)
+			return exmacro(menu->backs, 1);
+		else
+			return 0;
+	}
+	
+	menu_flg = x;
+	return exmacro(menu->entries[menu->last_position]->m, 1);
 }
 
 /* Build array of menu name from list of menus for completion */
 
-static unsigned char **getmenus(void)
+unsigned char **getmenus(void)
 {
 	unsigned char **s = vaensure(NULL, 20);
 	struct rc_menu *m;
+	vaperm(s);
 
 	for (m = menus; m; m = m->next)
 		s = vaadd(s, vsncpy(NULL, 0, sz(m->name)));
-	vasort(s, aLen(s));
+	vasort(av(s));
 	return s;
 }
 
@@ -139,30 +109,22 @@ static int menucmplt(BW *bw)
 	return simple_cmplt(bw,smenus);
 }
 
-/* When user selects a menu to bring up */
-
-static int domenu(BW *bw, unsigned char *s, void *object, int *notify)
-{
-	struct rc_menu *menu = find_menu(s);
-	vsrm(s);
-	if (!menu) {
-		msgnw(bw->parent, joe_gettext(_("No such menu")));
-		if (notify)
-			*notify = 1;
-		return -1;
-	} else {
-		bw->b->o.readonly = bw->o.readonly = bw->b->rdonly;
-		return display_menu(bw, menu, notify);
-	}
-}
-
 /* Menu of macros command: prompt for a menu to bring up */
 
 int umenu(BW *bw)
 {
-	if (wmkpw(bw->parent, joe_gettext(_("Menu: ")), &menuhist, domenu, USTR "menu", NULL, menucmplt, NULL, NULL, locale_map, 0)) {
-		return 0;
-	} else {
+	unsigned char *s = ask(bw->parent, joe_gettext(USTR _("Menu: ")), &menuhist, USTR "menu", menucmplt, locale_map, 0, 0, NULL);
+	struct rc_menu *menu;
+	
+	if (!s)
 		return -1;
+	
+	menu = find_menu(s);
+	if (!menu) {
+		msgnw(bw->parent, joe_gettext(_("No such menu")));
+		return -1;
+	} else {
+		bw->b->o.readonly = bw->o.readonly = bw->b->rdonly;
+		return display_menu(bw, menu);
 	}
 }

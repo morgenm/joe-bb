@@ -14,7 +14,7 @@ extern Screen *maint;		/* Primary screen */
 extern int usexmouse;		/* Use xterm mouse support? */
 void nungetc(int c);
 void dofollows(void);
-int edloop(int flg);
+int edloop(void);
 void edupd(int flg);
 extern KBD *shell_kbd;
 

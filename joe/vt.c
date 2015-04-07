@@ -113,24 +113,23 @@ void psetattr(P *p, int attr, int cur, int adv)
 	if (!adv)
 		p = pdup(p, USTR "psetattr");
 	if (e) {
-		binss(p, "\033[m"); pfwrd(p, 3);
+		binss(p, USTR "\033[m"); pfwrd(p, 3);
 		cur = 0;
 	}
 	e = (attr & ~cur);
 	if (e & INVERSE) {
-		binss(p, "\033[7m"); pfwrd(p, 4);
+		binss(p, USTR "\033[7m"); pfwrd(p, 4);
 	}
 	if (e & BOLD) {
-		binss(p, "\033[1m"); pfwrd(p, 4);
+		binss(p, USTR "\033[1m"); pfwrd(p, 4);
 	}
 	if (e & UNDERLINE) {
-		binss(p, "\033[4m"); pfwrd(p, 4);
+		binss(p, USTR "\033[4m"); pfwrd(p, 4);
 	}
 	if ((cur & FG_MASK) != (attr & FG_MASK)) {
 		int color = ((attr & FG_VALUE) >> FG_SHIFT);
 		if (color >= 0 && color <= 7) {
-			unsigned char bf[10];
-			joe_snprintf_1(bf, sizeof(bf), "\033[%dm", color + 30);
+			unsigned char *bf = vsfmt(NULL, 0, USTR "\033[%dm", color + 30);
 			binss(p, bf);
 			pfwrd(p, zlen(bf));
 		}
@@ -138,8 +137,7 @@ void psetattr(P *p, int attr, int cur, int adv)
 	if ((cur & BG_MASK) != (attr & BG_MASK)) {
 		int color = ((attr & BG_VALUE) >> BG_SHIFT);
 		if (color >= 0 && color <= 7) {
-			unsigned char bf[10];
-			joe_snprintf_1(bf, sizeof(bf), "\033[%dm", color + 40);
+			unsigned char *bf = vsfmt(NULL, 0, USTR "\033[%dm", color + 40);
 			binss(p, bf);
 			pfwrd(p, zlen(bf));
 		}

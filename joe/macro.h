@@ -42,7 +42,7 @@ unsigned char *mtext(unsigned char *s, MACRO *m);
 
 /* Execute a macro */
 extern MACRO *curmacro; /* Current macro being executed */
-int exemac(MACRO *m);
+int exemac(va_list args);
 int exmacro(MACRO *m, int u);
 
 /* Keyboard macros user interface */
