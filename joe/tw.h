@@ -32,6 +32,7 @@ int uabort(BW *bw, int k);
 int uabort1(BW *bw, int k);
 void setline(B *b, long int line);
 int abortit(BW *bw);
+unsigned char *stagen(unsigned char *stalin, BW *bw, unsigned char *s, int fill);
 extern int staen;
 extern int staupd;
 extern int keepup;

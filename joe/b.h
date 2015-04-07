@@ -1,4 +1,4 @@
-/*
+ /*
  *	Editor engine
  *	Copyright
  *		(C) 1992 Joseph H. Allen
@@ -85,7 +85,7 @@ struct options {
 	int	picture;	/* Picture mode */
 	int	highlighter_context;	/* Use the context annotations from the highlighter for ^G */
 	int	single_quoted;	/* Ignore '  ' for ^G */
-	int	no_double_quoted;	/* Don't ignore " " for ^G */
+	int	no_double_quoted; /* Don't ignore " " for ^G */
 	int	c_comment;	/* Ignore text in C comments */
 	int	cpp_comment;	/* Ignore text after // comments */
 	int	pound_comment;	/* Ignore text after # comments */
@@ -143,9 +143,6 @@ struct buffer {
 };
 
 extern B bufs;
-
-/* 31744 */
-extern unsigned char stdbuf[stdsiz];	/* Convenient global buffer */
 
 extern int force;		/* Set to have final '\n' added to file */
 extern int tabwidth;		/* Default tab width */
@@ -283,11 +280,10 @@ unsigned char *brmem(P *p, unsigned char *blk, int size);
 unsigned char *brs(P *p, int size);
 
 /* Copy 'size' bytes from a buffer beginning at p into a variable length string. */
-unsigned char *brvs(P *p, int size);
+unsigned char *brvs(unsigned char *s, P *p, int size);
 
-/* Copy line into buffer.  Maximum of size bytes will be copied.  Buffer needs
-   to be one bigger for NIL */
-unsigned char *brzs(P *p, unsigned char *buf, int size);
+/* Copy line into variable length string buf. */
+unsigned char *brlinevs(unsigned char *buf, P *p);
 
 B *bnext(void);
 B *bafter(B *b);
@@ -315,7 +311,7 @@ void set_file_pos_orphaned();
 
 void breplace(B *b, B *n);
 
-unsigned char *dequote(unsigned char *);
+unsigned char *dequote(unsigned char *s);
 
 #define ANSI_BIT 0x40000000
 int ansi_code(unsigned char *s);
