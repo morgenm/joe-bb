@@ -428,7 +428,7 @@ void ttopnn(void)
 	}
 	if (!obufsiz)
 		obufsiz = 1;
-	obuf = joe_malloc(obufsiz);
+	obuf = (char *)joe_malloc(obufsiz);
 }
 
 /* Close terminal */
@@ -641,7 +641,7 @@ int ttgetc(void)
 	ttflsh();
 	m = timer_play();
 	if (m) {
-	        exemac(m);
+	        exemac(m, NO_MORE_DATA);
 	        edupd(1);
 	        ttflsh();
 	}
@@ -706,9 +706,31 @@ int ttgetc(void)
 	return havec;
 }
 
+/* Get character from input: convert whatever we get to Unicode */
+
+static struct utf8_sm main_utf8_sm;
+
+int ttgetch()
+{
+	if (locale_map->type) {
+		int utf8_char;
+		do {
+			char c = ttgetc();
+			utf8_char = utf8_decode(&main_utf8_sm, c);
+		} while (utf8_char < 0);
+		return utf8_char;
+	} else {
+		char c = ttgetc();
+		int utf8_char = to_uni(locale_map, c);
+		if (utf8_char == -1)
+			utf8_char = '?'; /* Maybe we should ignore it? */
+		return utf8_char;
+	}
+}
+
 /* Write string to output */
 
-void ttputs(char *s)
+void ttputs(const char *s)
 {
 	while (*s) {
 		obuf[obufp++] = *s++;
@@ -770,7 +792,7 @@ int ttshell(char *cmd)
 {
 	int x, omode = ttymode;
 	int stat= -1;
-	char *s = getenv("SHELL");
+	const char *s = getenv("SHELL");
 
 	if (!s) {
 		s = "/bin/sh";
@@ -1041,13 +1063,13 @@ static RETSIGTYPE death(int unused)
 
 /* Build a new environment, but replace one variable */
 
-static char **newenv(char **old, char *s)
+static const char **newenv(const char * const *old, const char *s)
 {
-	char **new;
+	const char **newv;
 	int x, y, z;
 
 	for (x = 0; old[x]; ++x) ;
-	new = (char **) joe_malloc((x + 2) * SIZEOF(char *));
+	newv = (const char **) joe_malloc((x + 2) * SIZEOF(char *));
 
 	for (x = 0, y = 0; old[x]; ++x) {
 		for (z = 0; s[z] != '='; ++z)
@@ -1055,21 +1077,21 @@ static char **newenv(char **old, char *s)
 				break;
 		if (s[z] == '=') {
 			if (s[z + 1])
-				new[y++] = s;
+				newv[y++] = s;
 		} else
-			new[y++] = old[x];
+			newv[y++] = old[x];
 	}
 	if (x == y)
-		new[y++] = s;
-	new[y] = 0;
-	return new;
+		newv[y++] = s;
+	newv[y] = 0;
+	return newv;
 }
 
 /* Create a shell process */
 
 /* If out_only is set, leave program's stdin attached to JOE's stdin */
 
-MPX *mpxmk(int *ptyfd, char *cmd, char **args, void (*func) (/* ??? */), void *object, void (*die) (/* ??? */), void *dieobj, int out_only,
+MPX *mpxmk(int *ptyfd, const char *cmd, char **args, void (*func)(void *object, char *data, ptrdiff_t len), void *object, void (*die) (void *object), void *dieobj, int out_only,
            ptrdiff_t w, ptrdiff_t h)
 {
 	char buf[80];
@@ -1173,8 +1195,8 @@ MPX *mpxmk(int *ptyfd, char *cmd, char **args, void (*func) (/* ??? */), void *o
 				ttyfd = open(name, O_RDWR);
 
 			if (ttyfd != -1) {
-				char **enva;
-				char **env;
+				const char **enva;
+				const char **env;
 
 				if (!out_only) {			/* Standard input */
 					dup2(ttyfd, 0);

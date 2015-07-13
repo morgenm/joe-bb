@@ -1,10 +1,21 @@
 /* JOE global header file */
 
 #define _FILE_OFFSET_BITS 64
-#define TO_INT_OK(a) ((int)(a)) /* Means it's OK that we are converting off_t to int in this case */
 #define TO_DIFF_OK(a) ((ptrdiff_t)(a)) /* Means it's OK that we are converting off_t to ptrdiff_t in this case */
 #define TO_CHAR_OK(a) ((char)(a)) /* Means it's OK that we are converting int to char */
-#define SIZEOF(a) ((int)sizeof(a))
+#define SIZEOF(a) ((ptrdiff_t)sizeof(a)) /* Signed version of sizeof() */
+
+#define WIND_BW(x, y) do { \
+  if (!((y)->watom->what & (TYPETW | TYPEPW))) \
+    return -1; \
+  (x) = (BW *)(y)->object; \
+  } while(0)
+
+#define WIND_MENU(x, y) do { \
+  if ((y)->watom->what != TYPEMENU) \
+    return -1; \
+  (x) = (MENU *)(y)->object; \
+  } while(0)
 
 #include "config.h"
 
@@ -191,20 +202,17 @@ typedef int pid_t;
 
 /* These do not belong here. */
 
-/* #define KEYS		256 */
-#define KEYS 267	/* 256 ascii + mdown, mup, mdrag, m2down, m2up, m2drag,
-                                        m3down, m3up, m3drag */
-#define KEY_MDOWN	256
-#define KEY_MUP		257
-#define KEY_MDRAG	258
-#define KEY_M2DOWN	259
-#define KEY_M2UP	260
-#define KEY_M2DRAG	261
-#define KEY_M3DOWN	262
-#define KEY_M3UP	263
-#define KEY_M3DRAG	264
-#define KEY_MWUP	265
-#define KEY_MWDOWN	266
+#define KEY_MDOWN	0x200000
+#define KEY_MUP		0x200001
+#define KEY_MDRAG	0x200002
+#define KEY_M2DOWN	0x200003
+#define KEY_M2UP	0x200004
+#define KEY_M2DRAG	0x200005
+#define KEY_M3DOWN	0x200006
+#define KEY_M3UP	0x200007
+#define KEY_M3DRAG	0x200008
+#define KEY_MWUP	0x200009
+#define KEY_MWDOWN	0x20000A
 
 #define stdsiz		8192
 #define FITHEIGHT	4		/* Minimum text window height */
@@ -263,6 +271,7 @@ struct highlight_state {
 
 /* Include files */
 
+#include "cmap.h"
 #include "b.h"
 #include "blocks.h"
 #include "bw.h"
@@ -313,3 +322,4 @@ struct highlight_state {
 #include "mmenu.h"
 #include "state.h"
 #include "options.h"
+#include "selinux.h"

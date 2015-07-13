@@ -28,8 +28,8 @@ void dofollows(void)
 
 	do {
 		if (w->y != -1 && w->watom->follow && w->object)
-			w->watom->follow(w->object);
-		w = (W *) (w->link.next);
+			w->watom->follow(w);
+		w = (W *)(w->link.next);
 	} while (w != maint->curwin);
 }
 
@@ -62,7 +62,7 @@ void edupd(int flg)
 	do {
 		if (w->y != -1) {
 			if (w->object && w->watom->disp)
-				w->watom->disp(w->object, flg);
+				w->watom->disp(w, flg);
 			msgout(w);
 		}
 		w = (W *) (w->link.next);
@@ -135,7 +135,7 @@ int edloop(int flg)
 			c = ungotc;
 			ungot = 0;
 		} else
-			c = ttgetc();
+			c = ttgetch();
 
 		/* Clear temporary messages */
 		w = maint->curwin;
@@ -181,16 +181,18 @@ int edloop(int flg)
 			if (x)
 				maint->curwin->main->kbd->seq[x - 1] = maint->curwin->kbd->seq[x - 1];
 		}
-		if (!m)
+		if (!m) {
 			m = timer_play();
+			c = NO_MORE_DATA;
+		}
 		if (m)
-			ret = exemac(m);
+			ret = exemac(m, c);
 
 		/* trailing part of backtick hack... */
 		/* for case where ` is very last character of pasted block */
 		while (!leave && (!flg || !term) && m && (m == type_backtick || (m->cmd && (m->cmd->func == utype || m->cmd->func == urtn))) && ttcheck() && havec == '`') {
-			ttgetc();
-			ret = exemac(type_backtick);
+			ttgetch();
+			ret = exemac(type_backtick, NO_MORE_DATA);
 		}
 
 		/* trailing part of disabled autoindent */
@@ -199,7 +201,7 @@ int edloop(int flg)
 				c = ungotc;
 				ungot = 0;
 			} else
-				c = ttgetc();
+				c = ttgetch();
 			goto more_no_auto;
 		}
 
@@ -226,7 +228,7 @@ extern void setbreak();
 extern int breakflg;
 #endif
 
-char **mainenv;
+const char * const *mainenv;
 
 B *startup_log = NULL;
 static int logerrors = 0;
@@ -246,15 +248,14 @@ void setlogerrs(void)
 }
 
 /* Opens new bw with startup log */
-int ushowlog(BW *bw)
+int ushowlog(W *w, int k)
 {
 	if (startup_log) {
 		B *copied;
 		BW *newbw;
 		void *object;
-		W *w;
 		
-		if (uduptw(bw)) {
+		if (uduptw(w, k)) {
 			return -1;
 		}
 		
@@ -276,7 +277,7 @@ int ushowlog(BW *bw)
 	return 1;
 }
 
-int main(int argc, char **real_argv, char **envv)
+int main(int argc, char **real_argv, const char * const *envv)
 {
 	CAP *cap;
 	char **argv = (char **)real_argv;
@@ -296,7 +297,7 @@ int main(int argc, char **real_argv, char **envv)
 
 	joe_locale();
 
-	mainenv = (char **)envv;
+	mainenv = envv;
 	
 	vmem = vtmp();
 	startup_log = bfind_scratch("* Startup Log *");
@@ -565,9 +566,9 @@ int main(int argc, char **real_argv, char **envv)
 				maint->curwin = bw->parent;
 				/* Execute macro */
 				if (er == -1 && bw->o.mnew)
-					exmacro(bw->o.mnew,1);
+					exmacro(bw->o.mnew, 1, NO_MORE_DATA);
 				if (er == 0 && bw->o.mold)
-					exmacro(bw->o.mold,1);
+					exmacro(bw->o.mold, 1, NO_MORE_DATA);
 				/* Hmm... window might not exist any more... depends on what macro does... */
 				if (lnum > 0)
 					pline(bw->cursor, lnum - 1);
@@ -595,7 +596,7 @@ int main(int argc, char **real_argv, char **envv)
 		BW *bw = wmktw(maint, bfind(""));
 
 		if (bw->o.mnew)
-			exmacro(bw->o.mnew,1);
+			exmacro(bw->o.mnew, 1, NO_MORE_DATA);
 	}
 	maint->curwin = maint->topwin;
 
@@ -618,7 +619,7 @@ int main(int argc, char **real_argv, char **envv)
 	}
 
 	if (!idleout) {
-		if (!isatty(fileno(stdin)) && modify_logic(maint->curwin->object, ((BW *)maint->curwin->object)->b)) {
+		if (!isatty(fileno(stdin)) && modify_logic((BW *)maint->curwin->object, ((BW *)maint->curwin->object)->b)) {
 			/* Start shell going in first window */
 			char **a;
 			char *cmd;
@@ -631,7 +632,7 @@ int main(int argc, char **real_argv, char **envv)
 			cmd = vsncpy(NULL, 0, sc("/bin/cat"));
 			a = vaadd(a, cmd);
 			
-			cstart (maint->curwin->object, "/bin/sh", a, NULL, NULL, 0, 1, NULL, 0);
+			cstart ((BW *)maint->curwin->object, "/bin/sh", a, NULL, NULL, 0, 1, NULL, 0);
 		}
 	}
 

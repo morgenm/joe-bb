@@ -10,9 +10,9 @@ struct mpx {
 	int	ackfd;		/* Packetizer response descriptor */
 	int	kpid;		/* Packetizer process id */
 	int	pid;		/* Client process id */
-	void	(*func) ();	/* Function to call when read occures */
+	void	(*func)(void *object, char *data, ptrdiff_t len);	/* Function to call when read occures */
 	void	*object;	/* First arg to pass to function */
-	void	(*die) ();	/* Function: call when client dies or closes */
+	void	(*die)(void *object);	/* Function: call when client dies or closes */
 	void	*dieobj;
 };
 
@@ -81,7 +81,7 @@ void ttclsn(void);
  * (3) Clear 'have'
  */
 int ttgetc(void);
-
+int ttgetch(void);
 int ttcheck(void);
 
 /* void ttputc(char c);  Write a character to the output buffer.  If it becomes
@@ -96,7 +96,7 @@ extern char *obuf; /* Output buffer */
 /* void ttputs(char *s);  Write a string to the output buffer.  Any time the
  * output buffer gets full, call ttflsh()
  */
-void ttputs(char *s);
+void ttputs(const char *s);
 
 /* int ttshell(char *s);  Run a shell command or if 's' is zero, run a
  * sub-shell
@@ -186,13 +186,7 @@ void signrm(void);
  *   Function to call when process dies in 'die'
  *   The first arg passed to func and die is object and dieobj
  */
-MPX *mpxmk(int *ptyfd, char *cmd, char **args, void (*func) (/* ??? */), void *object, void (*die) (/* ??? */), void *dieobj, int out_only, ptrdiff_t w, ptrdiff_t h);
-
-/* int subshell(int *ptyfd);
- * Execute a subshell.  Returns 'pid' of shell or zero if there was a
- * problem.  Returns file descriptor for the connected pty in 'ptyfd'.
- */
-int subshell();
+MPX *mpxmk(int *ptyfd, const char *cmd, char **args, void (*func)(void *object, char *data, ptrdiff_t len), void *object, void (*die) (void *object), void *dieobj, int out_only, ptrdiff_t w, ptrdiff_t h);
 
 extern int noxon;			/* Set if ^S/^Q processing should be disabled */
 extern int Baud;			/* Baud rate from joerc, cmd line or environment */

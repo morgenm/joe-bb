@@ -7,7 +7,7 @@
  */
 #include "types.h"
 
-char *merr;
+const char *merr;
 
 int mode_hex;
 int mode_eng;
@@ -31,7 +31,7 @@ struct var {
 	struct var *next;
 } *vars = NULL;
 
-static struct var *get(char *str)
+static struct var *get(const char *str)
 {
 	struct var *v;
 
@@ -99,7 +99,7 @@ static double expr(int prec, int en,struct var **rtv, int secure)
 					m = mparse(NULL,ptr,&sta,0);
 					ptr = q;
 					if (m) {
-						x = !exmacro(m,1);
+						x = !exmacro(m, 1, NO_MORE_DATA);
 						rmmacro(m);
 					} else {
 						if (!merr)
@@ -636,17 +636,17 @@ double calc(BW *bw, char *s, int secure)
 		v = get("cbrt"); v->func = m_cbrt;
 #endif
 #endif
-#ifdef HAVE_LN
-		v = get("ln"); v->func = m_log;
-#else
-#ifdef ln
-		v = get("ln"); v->func = m_log;
-#endif
-#endif
 #ifdef HAVE_LOG
-		v = get("log"); v->func = m_log10;
+		v = get("ln"); v->func = m_log;
 #else
 #ifdef log
+		v = get("ln"); v->func = m_log;
+#endif
+#endif
+#ifdef HAVE_LOG10
+		v = get("log"); v->func = m_log10;
+#else
+#ifdef log10
 		v = get("log"); v->func = m_log10;
 #endif
 #endif
@@ -671,19 +671,11 @@ double calc(BW *bw, char *s, int secure)
 		v = get("atan"); v->func = m_atan;
 #endif
 #endif
-#ifdef HAVE_M_PI
-		v = get("pi"); v->val = M_PI; v->set = 1;
-#else
-#ifdef m_pi
+#ifdef M_PI
 		v = get("pi"); v->val = M_PI; v->set = 1;
 #endif
-#endif
-#ifdef HAVE_M_E
+#ifdef M_E
 		v = get("e"); v->val = M_E; v->set = 1;
-#else
-#ifdef m_e
-		v = get("e"); v->val = M_E; v->set = 1;
-#endif
 #endif
 #ifdef HAVE_SINH
 		v = get("sinh"); v->func = m_sinh;
@@ -741,10 +733,10 @@ double calc(BW *bw, char *s, int secure)
 		v = get("ceil"); v->func = m_ceil;
 #endif
 #endif
-#ifdef HAVE_ABS
+#ifdef HAVE_FABS
 		v = get("abs"); v->func = m_fabs;
 #else
-#ifdef abs
+#ifdef fabs
 		v = get("abs"); v->func = m_fabs;
 #endif
 #endif
@@ -844,9 +836,12 @@ double calc(BW *bw, char *s, int secure)
 }
 
 /* Main user interface */
-static int domath(BW *bw, char *s, void *object, int *notify, int secure)
+static int domath(W *w, char *s, void *object, int *notify, int secure)
 {
-	double result = calc(bw, s, secure);
+	double result;
+	BW *bw;
+	WIND_BW(bw, w);
+	result = calc(bw, s, secure);
 
 	if (notify) {
 		*notify = 1;
@@ -877,23 +872,23 @@ static int domath(BW *bw, char *s, void *object, int *notify, int secure)
 	return 0;
 }
 
-static int doumath(BW *bw, char *s, void *object, int *notify)
+static int doumath(W *w, char *s, void *object, int *notify)
 {
-	return domath(bw, s, object, notify, 0);
+	return domath(w, s, object, notify, 0);
 }
 
-static int dosmath(BW *bw, char *s, void *object, int *notify)
+static int dosmath(W *w, char *s, void *object, int *notify)
 {
-	return domath(bw, s, object, notify, 1);
+	return domath(w, s, object, notify, 1);
 }
 
 
 B *mathhist = NULL;
 
-int umath(BW *bw)
+int umath(W *w, int k)
 {
 	joe_set_signal(SIGFPE, fperr);
-	if (wmkpw(bw->parent, "=", &mathhist, doumath, "Math", NULL, NULL, NULL, NULL, locale_map, 0)) {
+	if (wmkpw(w, "=", &mathhist, doumath, "Math", NULL, NULL, NULL, NULL, locale_map, 0)) {
 		return 0;
 	} else {
 		return -1;
@@ -902,10 +897,10 @@ int umath(BW *bw)
 
 /* Secure version: no macros allowed */
 
-int usmath(BW *bw)
+int usmath(W *w, int k)
 {
 	joe_set_signal(SIGFPE, fperr);
-	if (wmkpw(bw->parent, "=", &mathhist, dosmath, "Math", NULL, NULL, NULL, NULL, locale_map, 0)) {
+	if (wmkpw(w, "=", &mathhist, dosmath, "Math", NULL, NULL, NULL, NULL, locale_map, 0)) {
 		return 0;
 	} else {
 		return -1;

@@ -6,18 +6,13 @@
  *	This file is part of JOE (Joe's Own Editor)
  */
 
-/* A key binding */
-struct key {
-	int	k;			/* Flag: 0=binding, 1=submap */
-	union {
-		void	*bind;		/* What key is bound to */
-		KMAP	*submap;	/* Sub KMAP address (for prefix keys) */
-	} value;
-};
-
 /* A map of keycode to command/sub-map bindings */
 struct kmap {
-	KEY	keys[KEYS];	/* KEYs */
+	struct cmap cmap;	/* Character map: (optimized version of src) */
+	struct interval_list *src;	/* Interval list which is source of cmap */
+	struct bind dflt;		/* Default binding which is source of cmap */
+	int cmap_version;	/* When cmap_version != src_version, we update cmap */
+	int src_version;	/* Increment this whenever src is changed */
 };
 
 /** A keyboard handler **/
@@ -64,7 +59,7 @@ void rmkmap(KMAP *kmap);
  * is speicified, then the key sequences
  * ^K A, ^K B, ^K C, ... ^K Z are all bound.
  */
-int kadd(CAP *cap, KMAP *kmap, char *seq, void *bind);
+int kadd(CAP *cap, KMAP *kmap, char *seq, MACRO *bind);
 
 /* void kcpy(KMAP *dest,KMAP *src);
  * Copy all of the entries in the 'src' keymap into the 'dest' keymap
@@ -98,7 +93,7 @@ void rmkbd(KBD *k);
 
      Returns binding for a completed key sequence
 */
-void *dokey(KBD *kbd, int n);
+MACRO *dokey(KBD *kbd, int n);
 
 /* A list of named KMAPs */
 struct context {
@@ -108,7 +103,7 @@ struct context {
 };
 
 /* JM - user command handler */
-int ukeymap();
+int ukeymap(W *w, int k);
 
 /* True is KMAP is empty */
 int kmap_empty(KMAP *k);
@@ -117,10 +112,10 @@ int kmap_empty(KMAP *k);
  * Find and return the KMAP for a given context name.  If none is found, an
  * empty kmap is created, bound to the context name, and returned.
  */
-KMAP *kmap_getcontext(char *name);
+KMAP *kmap_getcontext(const char *name);
 
 /* KMAP *ngetcontext(char *name);
  * JM - Find and return the KMAP for a given context name.  If none is found,
  * NULL is returned.
  */
-KMAP *ngetcontext(char *name);
+KMAP *ngetcontext(const char *name);

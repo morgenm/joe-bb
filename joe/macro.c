@@ -85,7 +85,8 @@ MACRO *dupmacro(MACRO *mac)
 
 MACRO *macstk(MACRO *m, int k)
 {
-	m->k = k;
+	if (k != -1)
+		m->k = k;
 	return m;
 }
 
@@ -183,11 +184,11 @@ MACRO *mparse(MACRO *m, char *buf, ptrdiff_t *sta, int secure)
 				if (!m->steps) {
 					MACRO *macro = m;
 
-					m = mkmacro(-1, 0, 0, NULL);
+					m = mkmacro(NO_MORE_DATA, 0, 0, NULL);
 					addmacro(m, macro);
 				}
 			} else
-				m = mkmacro(-1, 0, 0, NULL);
+				m = mkmacro(NO_MORE_DATA, 0, 0, NULL);
 			addmacro(m, mkmacro(buf[x], 0, 0, secure ? findcmd("secure_type") : findcmd("type")));
 			++x;
 		}
@@ -229,12 +230,12 @@ MACRO *mparse(MACRO *m, char *buf, ptrdiff_t *sta, int secure)
 				if (!m->steps) {
 					MACRO *macro = m;
 
-					m = mkmacro(-1, 0, 0, NULL);
+					m = mkmacro(NO_MORE_DATA, 0, 0, NULL);
 					addmacro(m, macro);
 				}
-				addmacro(m, mkmacro(-1, flg, 0, cmd));
+				addmacro(m, mkmacro(NO_MORE_DATA, flg, 0, cmd));
 			} else
-				m = mkmacro(-1, flg, 0, cmd);
+				m = mkmacro(NO_MORE_DATA, flg, 0, cmd);
 		} else { /* not a valid command */
 			*sta = -1;
 			return NULL;
@@ -357,10 +358,10 @@ void chmac(void)
 		recmac->m->steps[recmac->m->n - 1]->k = 3;
 }
 
-static void record(MACRO *m)
+static void record(MACRO *m, int k)
 {
 	if (recmac)
-		addmacro(recmac->m, dupmacro(m));
+		addmacro(recmac->m, macstk(dupmacro(m), k));
 }
 
 static int ifdepth=0;		/* JM: Nesting level of if cmds */
@@ -379,7 +380,7 @@ static int iffail=0;		/* JM: Depth where ifflag became 0 */
  * dialogs in ufile.c).
  */
 
-int uquery(BW *bw)
+int uquery(W *w, int k)
 {
 	int ret;
 	int oid=ifdepth, oifl=ifflag, oifa=iffail;
@@ -401,7 +402,7 @@ static int argset = 0;		/* Set if 'arg' is set */
 
 /* Execute a macro which is just a simple command */
 
-static int exsimple(MACRO *m, int arg, int u)
+static int exsimple(MACRO *m, int arg, int u, int k)
 {
 	CMD *cmd = m->cmd;
 	int flg = 0; /* set if we should not try to merge minor changes into single undo record */
@@ -429,7 +430,7 @@ static int exsimple(MACRO *m, int arg, int u)
 			umclear();
 		/* Repeat... */
 		while (arg-- && !leave && !ret)
-			ret = execmd(cmd, m->k);
+			ret = execmd(cmd, k != NO_MORE_DATA ? k : m->k);
 		if (leave)
 			return ret;
 		if (flg && u)
@@ -444,7 +445,7 @@ static int exsimple(MACRO *m, int arg, int u)
 int current_arg = 1;
 int current_arg_set = 0;
 
-int exmacro(MACRO *m, int u)
+int exmacro(MACRO *m, int u, int k)
 {
 	int larg;
 	int negarg = 0;
@@ -467,7 +468,7 @@ int exmacro(MACRO *m, int u)
 	/* Just a simple command? */
 
 	if (!m->steps) {
-		return exsimple(m, larg, u);
+		return exsimple(m, larg, u, k);
 	}
 
 	/* Must be a real macro then... */
@@ -523,9 +524,9 @@ int exmacro(MACRO *m, int u)
 
 				/* This is the key step of the macro... */
 				if (d->flg&2)
-					main_ret = exmacro(d, 0);
+					main_ret = exmacro(d, 0, NO_MORE_DATA);
 				else
-					ret = exmacro(d, 0);
+					ret = exmacro(d, 0, NO_MORE_DATA);
 
 				if(d->steps) ifdepth=oid, ifflag=oifl, iffail=oifa;
 				current_arg = tmp_arg;
@@ -538,7 +539,7 @@ int exmacro(MACRO *m, int u)
 
 			/* Pop ^KB ^KK stack */
 			while (nstack > stk)
-				upop(NULL);
+				upop(NULL, 0);
 		--larg;
 		}
 		ret |= main_ret;
@@ -639,16 +640,16 @@ int exmacro(MACRO *m, int u)
 /* Execute a macro - for user typing */
 /* Records macro in macro recorder, resets if */
 
-int exemac(MACRO *m)
+int exemac(MACRO *m, int k)
 {
-	record(m);
+	record(m, k);
 	ifflag=1; ifdepth=iffail=0;
-	return exmacro(m, 1);
+	return exmacro(m, 1, k);
 }
 
 /* Keyboard macro user routines */
 
-static int dorecord(BW *bw, int c, void *object, int *notify)
+static int dorecord(W *w, int c, void *object, int *notify)
 {
 	int n;
 	struct recmac *r;
@@ -664,18 +665,18 @@ static int dorecord(BW *bw, int c, void *object, int *notify)
 			return -1;
 	r = (struct recmac *) joe_malloc(SIZEOF(struct recmac));
 
-	r->m = mkmacro(0, 0, 0, NULL);
+	r->m = mkmacro(NO_MORE_DATA, 0, 0, NULL);
 	r->next = recmac;
 	r->n = c - '0';
 	recmac = r;
 	return 0;
 }
 
-int urecord(BW *bw, int c)
+int urecord(W *w, int c)
 {
 	if (c >= '0' && c <= '9')
-		return dorecord(bw, c, NULL, NULL);
-	else if (mkqw(bw->parent, sz(joe_gettext(_("Macro to record (0-9 or ^C to abort): "))), dorecord, NULL, NULL, NULL))
+		return dorecord(w, c, NULL, NULL);
+	else if (mkqw(w, sz(joe_gettext(_("Macro to record (0-9 or ^C to abort): "))), dorecord, NULL, NULL, NULL))
 		return 0;
 	else
 		return -1;
@@ -684,14 +685,16 @@ int urecord(BW *bw, int c)
 extern time_t timer_macro_delay;
 extern MACRO *timer_macro;
 
-static int dotimer1(BW *bw, char *s, void *object, int *notify)
+static int dotimer1(W *w, char *s, void *object, int *notify)
 {
+	BW *bw;
 	long num;
 	if (notify)
 		*notify = 1;
+	WIND_BW(bw, w);
 	num = (long)calc(bw, s, 0);
 	if (merr) {
-		msgnw(bw->parent, merr);
+		msgnw(w, merr);
 		return -1;
 	}
 	timer_macro_delay = num;
@@ -699,7 +702,7 @@ static int dotimer1(BW *bw, char *s, void *object, int *notify)
 	return 0;
 }
 
-static int dotimer(BW *bw, int c, void *object, void *notify)
+static int dotimer(W *w, int c, void *object, int *notify)
 {
 	if (c < '0' || c > '9')
 		return -1;
@@ -710,7 +713,7 @@ static int dotimer(BW *bw, int c, void *object, void *notify)
 		}
 		timer_macro = dupmacro(kbdmacro[c]);
 		timer_macro_delay = 0;
-		if (wmkpw(bw->parent, joe_gettext(_("Delay in seconds between macro invocation (^C to abort): ")), NULL, dotimer1, NULL, NULL, utypebw, NULL, NULL, locale_map,0))
+		if (wmkpw(w, joe_gettext(_("Delay in seconds between macro invocation (^C to abort): ")), NULL, dotimer1, NULL, NULL, utypebw, NULL, NULL, locale_map,0))
 			return 0;
 		else
 			return -1;
@@ -719,20 +722,20 @@ static int dotimer(BW *bw, int c, void *object, void *notify)
 	}
 }
 
-int utimer(BW *bw)
+int utimer(W *w, int k)
 {
 	timer_macro_delay = 0;
 	if (timer_macro) {
 		rmmacro(timer_macro);
 		timer_macro = 0;
 	}
-	if (mkqw(bw->parent, sz(joe_gettext(_("Macro to play (0-9 or ^C to abort): "))), dotimer, NULL, NULL, NULL))
+	if (mkqw(w, sz(joe_gettext(_("Macro to play (0-9 or ^C to abort): "))), dotimer, NULL, NULL, NULL))
 		return 0;
 	else
 		return -1;
 }
 
-int ustop(void)
+int ustop(W *w, int k)
 {
 	unmac();
 	if (recmac) {
@@ -745,13 +748,13 @@ int ustop(void)
 			rmmacro(kbdmacro[r->n]);
 		kbdmacro[r->n] = r->m;
 		if (recmac)
-			record(m = mkmacro(r->n + '0', 0, 0, findcmd("play"))), rmmacro(m);
+			record(m = mkmacro(r->n + '0', 0, 0, findcmd("play")), NO_MORE_DATA), rmmacro(m);
 		joe_free(r);
 	}
 	return 0;
 }
 
-static int doplay(BW *bw, int c, void *object, int *notify)
+static int doplay(W *w, int c, void *object, int *notify)
 {
 	if (notify)
 		*notify = 1;
@@ -762,7 +765,7 @@ static int doplay(BW *bw, int c, void *object, int *notify)
 		if (playmode[c] || !kbdmacro[c])
 			return -1;
 		playmode[c] = 1;
-		ret = exmacro(kbdmacro[c], 0);
+		ret = exmacro(kbdmacro[c], 0, NO_MORE_DATA);
 		playmode[c] = 0;
 		return ret;
 	} else {
@@ -771,10 +774,12 @@ static int doplay(BW *bw, int c, void *object, int *notify)
 	}
 }
 
-int umacros(BW *bw)
+int umacros(W *w, int k)
 {
 	int x;
 	char buf[1024];
+	BW *bw;
+	WIND_BW(bw, w);
 
 	p_goto_eol(bw->cursor);
 	for (x = 0; x != 10; ++x)
@@ -824,11 +829,11 @@ void load_macros(FILE *f)
 	}
 }
 
-int uplay(BW *bw, int c)
+int uplay(W *w, int c)
 {
 	if (c >= '0' && c <= '9')
-		return doplay(bw, c, NULL, NULL);
-	else if (mkqwna(bw->parent, sz(joe_gettext(_("Play-"))), doplay, NULL, NULL, NULL))
+		return doplay(w, c, NULL, NULL);
+	else if (mkqwna(w, sz(joe_gettext(_("Play-"))), doplay, NULL, NULL, NULL))
 		return 0;
 	else
 		return -1;
@@ -836,15 +841,17 @@ int uplay(BW *bw, int c)
 
 /* Repeat-count setting */
 
-static int doarg(BW *bw, char *s, void *object, int *notify)
+static int doarg(W *w, char *s, void *object, int *notify)
 {
+	BW *bw;
 	int num;
+	WIND_BW(bw, w);
 
 	if (notify)
 		*notify = 1;
 	num = (int)calc(bw, s, 1);
 	if (merr) {
-		msgnw(bw->parent, merr);
+		msgnw(w, merr);
 		return -1;
 	}
 	arg = num;
@@ -853,21 +860,23 @@ static int doarg(BW *bw, char *s, void *object, int *notify)
 	return 0;
 }
 
-int uarg(BW *bw)
+int uarg(W *w, int k)
 {
-	if (wmkpw(bw->parent, joe_gettext(_("No. times to repeat next command (^C to abort): ")), NULL, doarg, NULL, NULL, utypebw, NULL, NULL, locale_map,0))
+	if (wmkpw(w, joe_gettext(_("No. times to repeat next command (^C to abort): ")), NULL, doarg, NULL, NULL, utypebw, NULL, NULL, locale_map,0))
 		return 0;
 	else
 		return -1;
 }
 
-static int doif(BW *bw,char *s,void *object,int *notify)
+static int doif(W *w,char *s,void *object,int *notify)
 {
 	int num;
+	BW *bw;
 	if (notify) *notify=1;
+	WIND_BW(bw, w);
 	num = (int)calc(bw, s, 0);
 	if (merr) {
-		msgnw(bw->parent, merr);
+		msgnw(w, merr);
 		return -1;
 	}
 	ifflag = (num ? 1 : 0);
@@ -876,39 +885,39 @@ static int doif(BW *bw,char *s,void *object,int *notify)
 	return 0;
 }
 
-static int ifabrt()
+static int ifabrt(W *w, void *object)
 {
 	ifdepth--;
 	return 0;
 }
 
-int uif(BW *bw)
+int uif(W *w, int k)
 {
 	ifdepth++;
 	if (!ifflag) return 0;
-	if (wmkpw(bw->parent,joe_gettext(_("If (^C to abort): ")),NULL,doif,NULL,ifabrt,utypebw,NULL,NULL,locale_map,0)) return 0;
+	if (wmkpw(w,joe_gettext(_("If (^C to abort): ")),NULL,doif,NULL,ifabrt,utypebw,NULL,NULL,locale_map,0)) return 0;
 	else return -1;
 }
 
-int uelsif(BW *bw)
+int uelsif(W *w, int k)
 {
 	if (!ifdepth) {
-		msgnw(bw->parent,joe_gettext(_("Elsif without if")));
+		msgnw(w,joe_gettext(_("Elsif without if")));
 		return -1;
 	} else if(ifflag) {
 		ifflag=iffail=0; /* don't let the next else/elsif get run */
 	} else if(ifdepth == iffail) {
 		ifflag=1;	/* so the script can type the condition :) */
-		if(wmkpw(bw->parent,joe_gettext(_("Else if: ")),NULL,doif,NULL,NULL,utypebw,NULL,NULL,locale_map,0)) return 0;
+		if(wmkpw(w,joe_gettext(_("Else if: ")),NULL,doif,NULL,NULL,utypebw,NULL,NULL,locale_map,0)) return 0;
 		else return -1;
 	}
 	return 0;
 }
 
-int uelse(BW *bw)
+int uelse(W *w, int k)
 {
 	if (!ifdepth) {
-		msgnw(bw->parent,joe_gettext(_("Else without if")));
+		msgnw(w,joe_gettext(_("Else without if")));
 		return -1;
 	} else if(ifdepth == iffail) {
 		ifflag = !ifflag;
@@ -916,10 +925,10 @@ int uelse(BW *bw)
 	return 0;
 }
 
-int uendif(BW *bw)
+int uendif(W *w, int k)
 {
 	if(!ifdepth) {
-		msgnw(bw->parent,joe_gettext(_("Endif without if")));
+		msgnw(w,joe_gettext(_("Endif without if")));
 		return -1;
 	}
 	if(iffail==ifdepth) iffail--, ifflag=1;
@@ -932,7 +941,7 @@ int uendif(BW *bw)
 int unaarg;
 int negarg;
 
-static int douarg(BW *bw, int c, void *object, int *notify)
+static int douarg(W *w, int c, void *object, int *notify)
 {
 	if (c == '-')
 		negarg = !negarg;
@@ -963,19 +972,19 @@ static int douarg(BW *bw, int c, void *object, int *notify)
 		return 0;
 	}
 	joe_snprintf_2(msgbuf, JOE_MSGBUFSIZE, joe_gettext(_("Repeat %s%d")), negarg ? "-" : "", unaarg);
-	if (mkqwna(bw->parent, sz(msgbuf), douarg, NULL, NULL, notify))
+	if (mkqwna(w, sz(msgbuf), douarg, NULL, NULL, notify))
 		return 0;
 	else
 		return -1;
 }
 
-int uuarg(BW *bw, int c)
+int uuarg(W *w, int c)
 {
 	unaarg = 0;
 	negarg = 0;
 	if ((c >= '0' && c <= '9') || c == '-')
-		return douarg(bw, c, NULL, NULL);
-	else if (mkqwna(bw->parent, sz(joe_gettext(_("Repeat"))), douarg, NULL, NULL, NULL))
+		return douarg(w, c, NULL, NULL);
+	else if (mkqwna(w, sz(joe_gettext(_("Repeat"))), douarg, NULL, NULL, NULL))
 		return 0;
 	else
 		return -1;
