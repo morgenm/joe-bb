@@ -50,7 +50,7 @@ int validate_rc()
 
 /* Parse a macro- allow it to cross lines */
 
-static MACRO *multiparse(JFILE *fd, int *refline, char *buf, ptrdiff_t *ofst, int *referr, char *name)
+MACRO *multiparse(JFILE *fd, int *refline, char **buf, ptrdiff_t *ofst, int *referr, char *name)
 {
 	MACRO *m;
 	ptrdiff_t x = *ofst;
@@ -58,13 +58,13 @@ static MACRO *multiparse(JFILE *fd, int *refline, char *buf, ptrdiff_t *ofst, in
 	int line = *refline;
 	m = 0;
 	for (;;) {
-		m = mparse(m, buf + x, &x, 0);
+		m = mparse(m, *buf + x, &x, 0);
 		if (x == -1) { /* Error */
 			err = -1;
 			logerror_2(joe_gettext(_("%s %d: Unknown command in macro\n")), name, line);
 			break;
 		} else if (x == -2) { /* Get more input */
-			jfgets(buf, 1024, fd);
+			jfgets(buf, fd);
 			++line;
 			x = 0;
 		} else /* We're done */
@@ -87,17 +87,16 @@ int procrc(CAP *cap, char *name)
 	OPTIONS *o = &fdefault;	/* Current options */
 	KMAP *context = NULL;	/* Current context */
 	struct rc_menu *current_menu = NULL;
-	char buf[1024];	/* Input buffer */
-	char buf1[1024];	/* Input buffer */
+	char *buf = vsmk(128);	/* Input buffer */
+	char *buf1 = NULL;	/* Input buffer */
 	JFILE *fd;		/* rc file */
 	int line = 0;		/* Line number */
 	int err = 0;		/* Set to 1 if there was a syntax error */
 
-	zlcpy(buf, SIZEOF(buf), name);
 #ifdef __MSDOS__
-	fd = jfopen(buf, "rt");
+	fd = jfopen(name, "rt");
 #else
-	fd = jfopen(buf, "r");
+	fd = jfopen(name, "r");
 #endif
 
 	if (!fd)
@@ -105,7 +104,7 @@ int procrc(CAP *cap, char *name)
 
 	logmessage_1(joe_gettext(_("Processing '%s'...\n")), name);
 
-	while (jfgets(buf, SIZEOF(buf), fd)) {
+	while (jfgets(&buf, fd)) {
 		line++;
 		switch (buf[0]) {
 		case ' ':
@@ -208,13 +207,13 @@ int procrc(CAP *cap, char *name)
 						for (y = x; !joe_isspace_eos(locale_map,buf[y]); ++y) ;
 						ch = buf[y];
 						buf[y] = 0;
-						zlcpy(buf1, SIZEOF(buf1), buf + x);
+						buf1 = vsncpy(NULL, 0, sz(buf + x));
 						if (y != x) {
 							ptrdiff_t sta = y + 1;
 							MACRO *m;
 
 							if (joe_isblank(locale_map,ch)
-							    && (m = multiparse(fd, &line, buf, &sta, &err, name)))
+							    && (m = multiparse(fd, &line, &buf, &sta, &err, name)))
 								addcmd(buf1, m);
 							else {
 								err = 1;
@@ -244,24 +243,23 @@ int procrc(CAP *cap, char *name)
 						for (c = x; !joe_isspace_eos(locale_map,buf[c]); ++c) ;
 						buf[c] = 0;
 						if (c != x) {
-							char bf[1024];
+							char *bf = 0;
 							char *p = getenv("HOME");
 							int rtn = -1;
-							bf[0] = 0;
 							if (p && buf[x] != '/') {
-								joe_snprintf_2(bf,SIZEOF(bf),"%s/.joe/%s",p,buf + x);
+								bf = vsfmt(bf, 0, "%s/.joe/%s", p, buf + x);
 								rtn = procrc(cap, bf);
 							}
 							if (rtn == -1 && buf[x] != '/') {
-								joe_snprintf_2(bf,SIZEOF(bf),"%s%s",JOERC,buf + x);
+								bf = vsfmt(bf, 0, "%s%s", JOERC, buf + x);
 								rtn = procrc(cap, bf);
 							}
 							if (rtn == -1 && buf[x] != '/') {
-								joe_snprintf_1(bf,SIZEOF(bf),"*%s",buf + x);
+								bf = vsfmt(bf, 0, "*%s", buf + x);
 								rtn = procrc(cap, bf);
 							}
 							if (rtn == -1 && buf[x] == '/') {
-								joe_snprintf_1(bf,SIZEOF(bf),"%s",buf + x);
+								bf = vsfmt(bf, 0, "%s", buf + x);
 								rtn = procrc(cap, bf);
 							}
 							switch (rtn) {
@@ -311,11 +309,11 @@ int procrc(CAP *cap, char *name)
 						for (c = x; !joe_isspace_eos(locale_map,buf[c]); ++c) ;
 						d = buf[c];
 						buf[c] = 0;
-						zlcpy(buf1, SIZEOF(buf1), buf + x);
+						buf1 = vsncpy(NULL, 0, sz(buf + x));
 						buf[c] = d;
 						for (y = c; joe_isblank(locale_map, buf[y]); ++y);
 						if (!joe_isspace_eos(locale_map, buf[y]))
-							m = multiparse(fd, &line, buf, &y, &err, name);
+							m = multiparse(fd, &line, &buf, &y, &err, name);
 						current_menu = create_menu(buf1, m);
 						context = 0;
 					} else {
@@ -342,7 +340,7 @@ int procrc(CAP *cap, char *name)
 				}
 
 				x = 0;
-				m = multiparse(fd, &line, buf, &x, &err, name);
+				m = multiparse(fd, &line, &buf, &x, &err, name);
 				if (x == -1)
 					break;
 				if (!m)

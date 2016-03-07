@@ -572,7 +572,7 @@ void wshowone(W *w)
 
 /* Create a window */
 
-W *wcreate(Screen *t, WATOM *watom, W *where, W *target, W *original, ptrdiff_t height, const char *huh, int *notify)
+W *wcreate(Screen *t, WATOM *watom, W *where, W *target, W *original, ptrdiff_t height, const char *huh)
 {
 	W *neww;
 
@@ -581,7 +581,7 @@ W *wcreate(Screen *t, WATOM *watom, W *where, W *target, W *original, ptrdiff_t 
 
 	/* Create the window */
 	neww = (W *) joe_malloc(SIZEOF(W));
-	neww->notify = notify;
+	neww->coro = 0;
 	neww->t = t;
 	neww->w = t->w;
 	seth(neww, height);
@@ -675,12 +675,8 @@ static ptrdiff_t doabort(W *w, int *ret)
 	deque(W, link, w);
 	if (w->watom->abort && w->object) {
 		*ret = w->watom->abort(w);
-		if (w->notify)
-			*w->notify = -1;
 	} else {
 		*ret = -1;
-		if (w->notify)
-			*w->notify = 1;
 	}
 	rmkbd(w->kbd);
 	joe_free(w);
@@ -739,11 +735,13 @@ void msgout(W *w)
 
 	if (w->msgb) {
 		mdisp(t, w->y + w->h - 1, w->msgb);
-		// w->msgb = 0;
+		obj_free(w->msgb);
+		w->msgb = 0;
 	}
 	if (w->msgt) {
 		mdisp(t, w->y + ((w->h > 1 && (w->y || !staen)) ? 1 : 0), w->msgt);
-		// w->msgt = 0;
+		obj_free(w->msgt);
+		w->msgt = 0;
 	}
 }
 
@@ -755,17 +753,21 @@ void msgclr(W *w)
 
 /* Set temporary message */
 
-char msgbuf[JOE_MSGBUFSIZE];
-
 /* display message on bottom line of window */
 void msgnw(W *w, const char *s)
 {
-	w->msgb = s;
+	if (w->msgb)
+		obj_free(w->msgb);
+	w->msgb = vsdupz(s);
+	obj_perm(w->msgb);
 }
 
 void msgnwt(W *w, const char *s)
 {
-	w->msgt = s;
+	if (w->msgt)
+		obj_free(w->msgt);
+	w->msgt = vsdupz(s);
+	obj_perm(w->msgt);
 }
 
 int urtn(W *w, int k)

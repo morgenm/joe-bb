@@ -718,7 +718,7 @@ void bwgenh(BW *w)
 			from = markb->byte;
 			to = markk->byte;
 		}
-	else if (marking && w == (BW *)maint->curwin->object && markb && markb->b == w->b && w->cursor->byte != markb->byte && !from) {
+	else if (marking && w==(BW *)maint->curwin->object && markb && markb->b == w->b && w->cursor->byte != markb->byte && !from) {
 		if (square) {
 			from = off_min(w->cursor->xcol, markb->xcol);
 			to = off_max(w->cursor->xcol, markb->xcol);
@@ -729,7 +729,7 @@ void bwgenh(BW *w)
 		}
 	}
 
-	if (marking && w == (BW *)maint->curwin->object)
+	if (marking && w==(BW *)maint->curwin->object)
 		msetI(t->updtab + w->y, 1, w->h);
 
 	if (dosquare) {
@@ -843,7 +843,7 @@ void bwgen(BW *w, int linums)
 			from = markb->byte;
 			to = markk->byte;
 		}
-	else if (marking && w == (BW *)maint->curwin->object && markb && markb->b == w->b && w->cursor->byte != markb->byte && !from) {
+	else if (marking && w==(BW *)maint->curwin->object && markb && markb->b == w->b && w->cursor->byte != markb->byte && !from) {
 		if (square) {
 			from = off_min(w->cursor->xcol, markb->xcol);
 			to = off_max(w->cursor->xcol, markb->xcol);
@@ -856,7 +856,7 @@ void bwgen(BW *w, int linums)
 		}
 	}
 
-	if (marking && w == (BW *)maint->curwin->object)
+	if (marking && w==(BW *)maint->curwin->object)
 		msetI(t->updtab + w->y, 1, w->h);
 
 	q = pdup(w->cursor, "bwgen");
@@ -869,6 +869,7 @@ void bwgen(BW *w, int linums)
 		if (linums)
 			gennum(w, screen, attr, t, y, t->compose);
 		if (t->updtab[y]) {
+			int idx = w->x;
 			p = getto(p, w->cursor, w->top, w->top->line + y - w->y);
 /*			if (t->insdel && !w->x) {
 				pset(q, p);
@@ -881,13 +882,17 @@ void bwgen(BW *w, int linums)
 					lgena(t, y, t->compose, w->x, w->x + w->w, q, w->offset, from, to);
 				magic(t, y, screen, attr, t->compose, (int) (w->cursor->xcol - w->offset + w->x));
 			} */
+			if (w->prompt && y == w->cursor->line - w->top->line + w->y) {
+				genfmt(w->t->t, w->x, y, w->promptofst, w->prompt, BG_COLOR(bg_prompt), 0);
+				idx += w->promptlen - w->promptofst;
+			}
 			if (dosquare)
 				if (w->top->line + y - w->y >= fromline && w->top->line + y - w->y <= toline)
-					t->updtab[y] = lgen(t, y, screen, attr, w->x, w->x + w->w, p, w->offset, from, to, get_highlight_state(w,p,w->top->line+y-w->y),w);
+					t->updtab[y] = lgen(t, y, screen, attr, idx, w->x + w->w, p, w->offset, from, to, get_highlight_state(w,p,w->top->line+y-w->y),w);
 				else
-					t->updtab[y] = lgen(t, y, screen, attr, w->x, w->x + w->w, p, w->offset, 0L, 0L, get_highlight_state(w,p,w->top->line+y-w->y),w);
+					t->updtab[y] = lgen(t, y, screen, attr, idx, w->x + w->w, p, w->offset, 0L, 0L, get_highlight_state(w,p,w->top->line+y-w->y),w);
 			else
-				t->updtab[y] = lgen(t, y, screen, attr, w->x, w->x + w->w, p, w->offset, from, to, get_highlight_state(w,p,w->top->line+y-w->y),w);
+				t->updtab[y] = lgen(t, y, screen, attr, idx, w->x + w->w, p, w->offset, from, to, get_highlight_state(w,p,w->top->line+y-w->y),w);
 		}
 	}
 
@@ -944,9 +949,19 @@ void bwresz(BW *w, ptrdiff_t wi, ptrdiff_t he)
 	}
 }
 
-BW *bwmk(W *window, B *b, int prompt)
+BW *bwmk(W *window, B *b, int prompt, const char *ps)
 {
 	BW *w = (BW *) joe_malloc(SIZEOF(BW));
+
+	if (ps) {
+		w->prompt = zdup(ps);
+		w->promptlen = fmtlen(ps);
+		w->promptofst = 0;
+	} else {
+		w->prompt = 0;
+		w->promptlen = 0;
+		w->promptofst = 0;
+	}
 
 	w->parent = window;
 	w->b = b;
@@ -1061,15 +1076,16 @@ void save_file_pos(FILE *f)
 
 void load_file_pos(FILE *f)
 {
-	char buf[1024];
-	while (fgets(buf,SIZEOF(buf)-1,f) && zcmp(buf,"done\n")) {
-		const char *p = buf;
+	char *buf = 0;
+	char *name = 0;
+	while (vsgets(&buf,f) && zcmp(buf,"done")) {
 		off_t pos;
-		char name[1024];
+		const char *p = buf;
+		
 		parse_ws(&p,'#');
 		if (!parse_off_t(&p, &pos)) {
 			parse_ws(&p, '#');
-			if (parse_string(&p, name, SIZEOF(name)) > 0) {
+			if (parse_string(&p, &name) > 0) {
 				set_file_pos(name, pos);
 			}
 		}
@@ -1121,6 +1137,8 @@ void bwrm(BW *w)
 	prm(w->top);
 	prm(w->cursor);
 	brm(w->b);
+	if (w->prompt)
+		joe_free(w->prompt);
 	joe_free(w);
 }
 
