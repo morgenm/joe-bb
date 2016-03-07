@@ -63,12 +63,14 @@ static double expr(int prec, int en,struct var **rtv, int secure)
 {
 	double x = 0.0, y, z;
 	struct var *v = NULL;
-	char ident[256];
-	char macr[256];
+	char *ident, *macr;
+	
+	ident = vsmk(0);
+	macr = vsmk(0);
 
 	parse_ws(&ptr, '#');
 
-	if (!parse_ident(&ptr, ident, SIZEOF(ident))) {
+	if (!parse_ident(&ptr, &ident)) {
 		if (!secure && !zcmp(ident ,"joe")) {
 			v = 0;
 			x = 0.0;
@@ -175,9 +177,22 @@ static double expr(int prec, int en,struct var **rtv, int secure)
 			x = v->val;
 		}
 	} else if ((*ptr >= '0' && *ptr <= '9') || *ptr == '.') {
-		char *eptr;
-		x = strtod(ptr,&eptr);
-		ptr = eptr;
+		if (ptr[0] == '0' && ptr[1] == 'x') {
+			x = 0.0;
+			ptr += 2;
+			while ((*ptr >= '0' && *ptr <= '9') || (*ptr >= 'a' && *ptr <='f') ||
+			       (*ptr >= 'A' && *ptr <= 'F'))
+				if (*ptr >= '0' && *ptr <= '9')
+					x = x * 16.0 + *ptr++ - '0';
+				else if (*ptr >= 'a' && *ptr <= 'f')
+					x = x * 16.0 + *ptr++ - 'a' + 10;
+				else
+					x = x * 16.0 + *ptr++ - 'A' + 10;
+		} else {
+			char *eptr;
+			x = strtod(ptr,&eptr);
+			ptr = eptr;
+		}
 	} else if (*ptr == '(') {
 		++ptr;
 		x = expr(0, en, &v, secure);
@@ -823,73 +838,61 @@ double calc(BW *bw, char *s, int secure)
 }
 
 /* Main user interface */
-static int domath(W *w, char *s, void *object, int *notify, int secure)
-{
-	double result;
-	BW *bw;
-	WIND_BW(bw, w);
-	result = calc(bw, s, secure);
-
-	if (notify) {
-		*notify = 1;
-	}
-	if (merr) {
-		msgnw(bw->parent, merr);
-		return -1;
-	}
-	vsrm(s);
-	if (mode_hex)
-#ifdef HAVE_LONG_LONG
-		joe_snprintf_1(msgbuf, JOE_MSGBUFSIZE, "0x%llX", (long long)result);
-#else
-		joe_snprintf_1(msgbuf, JOE_MSGBUFSIZE, "0x%lX", (long)result);
-#endif
-	else if (mode_eng)
-		joe_snprintf_1(msgbuf, JOE_MSGBUFSIZE, "%.16G", result);
-	else
-		joe_snprintf_1(msgbuf, JOE_MSGBUFSIZE, "%.16G", result);
-	if (bw->parent->watom->what != TYPETW || mode_ins) {
-		binsm(bw->cursor, sz(msgbuf));
-		pfwrd(bw->cursor, zlen(msgbuf));
-		bw->cursor->xcol = piscol(bw->cursor);
-	} else {
-		msgnw(bw->parent, msgbuf);
-	}
-	mode_ins = 0;
-	return 0;
-}
-
-static int doumath(W *w, char *s, void *object, int *notify)
-{
-	return domath(w, s, object, notify, 0);
-}
-
-static int dosmath(W *w, char *s, void *object, int *notify)
-{
-	return domath(w, s, object, notify, 1);
-}
-
 
 B *mathhist = NULL;
 
-int umath(W *w, int k)
+int domath(W *w, int k, int secure)
 {
+	BW *bw;
+	char *s;
+	WIND_BW(bw, w);
+	
 	joe_set_signal(SIGFPE, fperr);
-	if (wmkpw(w, "=", &mathhist, doumath, "Math", NULL, NULL, NULL, NULL, utf8_map, 0)) {
+	again:
+	
+	s = ask(w, "=", &mathhist, "Math", utypebw, utf8_map, 0, 0, NULL);
+	if (s) {
+		char buf[128];
+		double result = calc(bw, s, secure);
+
+		if (merr) {
+			msgnw(bw->parent, merr);
+			return -1;
+		}
+		if (mode_hex)
+#ifdef HAVE_LONG_LONG
+			joe_snprintf_1(buf, sizeof(buf), "0x%llX", (long long)result);
+#else
+			joe_snprintf_1(buf, sizeof(buf), "0x%lX", (long)result);
+#endif
+		else if (mode_eng)
+			joe_snprintf_1(buf, sizeof(buf), "%.16G", result);
+		else
+			joe_snprintf_1(buf, sizeof(buf), "%.16G", result);
+		if (bw->parent->watom->what != TYPETW || mode_ins) {
+			binsm(bw->cursor, sz(buf));
+			pfwrd(bw->cursor, zlen(buf));
+			bw->cursor->xcol = piscol(bw->cursor);
+		} else {
+			msgnw(bw->parent, buf);
+		}
+		mode_ins = 0;
+		goto again;
+
 		return 0;
 	} else {
 		return -1;
 	}
+}
+
+int umath(W *w, int k)
+{
+	return domath(w, k, 0);
 }
 
 /* Secure version: no macros allowed */
 
 int usmath(W *w, int k)
 {
-	joe_set_signal(SIGFPE, fperr);
-	if (wmkpw(w, "=", &mathhist, dosmath, "Math", NULL, NULL, NULL, NULL, utf8_map, 0)) {
-		return 0;
-	} else {
-		return -1;
-	}
+	return domath(w, k, 1);
 }

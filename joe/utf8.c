@@ -7,6 +7,11 @@
  */
 #include "types.h"
 
+/* If we didn't find a CODESET in locale.h/langinfo.h, forget about setlocale */
+#ifndef CODESET
+#undef HAVE_SETLOCALE
+#endif
+
 /* UTF-8 Encoder
  *
  * c is unicode character.
@@ -200,20 +205,6 @@ int utf8_decode_fwrd(const char **p,ptrdiff_t *plen)
 	return c;
 }
 
-/* Get next character from string and advance it, locale dependent */
-
-int fwrd_c(struct charmap *map, const char **s, ptrdiff_t *len)
-{
-	if (map->type)
-		return utf8_decode_fwrd(s, len);
-	else {
-		int c = *(const unsigned char *)*s;
-		*s = *s + 1;
-		if (len)
-			*len = *len - 1;
-		return c;
-	}
-}
 
 /* UTF-16 */
 

@@ -7,12 +7,6 @@
  */
 #include "types.h"
 
-/* Parse one character.  It can be UTF-8 if utf8 is set.  b has pointer to string length or NULL for zero-terminated strings */
-
-/* Returns the character or -256 for a category (in which case *cat is filled in if it's not NULL) */
-/* Returns NUL if a/b is at end of string */
-/* Returns UTF8_BAD or UTF8_INCOMPLETE for bad UTF-8 sequences */
-
 int escape(int utf8, const char **a, ptrdiff_t *b, struct Cclass **cat)
 {
 	int c = 0;
@@ -1115,14 +1109,14 @@ int rmatch(const unsigned char *pattern, const unsigned char *s, ...)
 
 /* Regular expression matcher */
 
-#define STACK_SIZE 8
+#define REGEX_STACK_SIZE 8
 
 struct thread
 {
 	unsigned char *pc;
 	Regmatch_t pos[MAX_MATCHES];
 	int sp;
-	int stack[STACK_SIZE];
+	int stack[REGEX_STACK_SIZE];
 };
 
 static int better(Regmatch_t *a, Regmatch_t *b, int bra_no)
