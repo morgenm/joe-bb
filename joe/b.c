@@ -1,4 +1,4 @@
-/*
+ /*
  *	Editor engine
  *	Copyright
  *		(C) 1992 Joseph H. Allen
@@ -25,8 +25,6 @@ extern int errno;
 #include <selinux/selinux.h>
 static int selinux_enabled = -1;
 #endif
-
-char stdbuf[stdsiz];
 
 int guesscrlf = 0;
 int guessindent = 0;
@@ -166,7 +164,7 @@ B *bafter(B *b)
 
 int udebug_joe(W *w, int k)
 {
-	char buf[1024];
+	char *buf = vsmk(128);
 	BW *bw;
 	B *b;
 	P *p;
@@ -177,13 +175,13 @@ int udebug_joe(W *w, int k)
 
 	for (b = bufs.link.next; b != &bufs; b = b->link.next) {
 		if (b->name)
-			joe_snprintf_1(buf, SIZEOF(buf), "Buffer %s\n", b->name);
+			buf = vsfmt(buf, 0, "Buffer %s\n", b->name);
 		else
-			joe_snprintf_1(buf, SIZEOF(buf), "Buffer 0x%p\n", (void *)b);
+			buf = vsfmt(buf, 0, "Buffer 0x%p\n", (void *)b);
 		binss(bw->cursor, buf);
 		pnextl(bw->cursor);
 		for (p = b->bof->link.next; p != b->bof; p = p->link.next) {
-			joe_snprintf_1(buf, SIZEOF(buf), "  Pointer created by %s\n", p->tracker);
+			buf = vsfmt(buf, 0, "  Pointer created by %s\n", p->tracker);
 			binss(bw->cursor, buf);
 			pnextl(bw->cursor);
 		}
@@ -314,7 +312,7 @@ void brm(B *b)
 			joe_free(b->name);
 		if (b->db)
 			rm_all_lattr_db(b->db);
-		vsrm(b->current_dir);
+		obj_free(b->current_dir);
 		demote(B, link, &frebufs, b);
 	}
 }
@@ -801,7 +799,7 @@ int pgetc(P *p)
 		int c; /* , oc; */
 		int d;
 		ptrdiff_t n; /* , m; */
-		off_t wid = 0;
+		off_t wid;
 
 		val = p->valcol;	/* Remember if column number was valid */
 		valattr = p->valattr;
@@ -2505,9 +2503,9 @@ char *parsens(const char *s, off_t *skip, off_t *amnt)
 
 	*skip = 0;
 	*amnt = MAXOFF;
-	x = sLEN(n) - 1;
+	x = obj_len(n) - 1;
 	if (x > 0 && n[x] >= '0' && n[x] <= '9') {
-		for (x = sLEN(n) - 1; x > 0 && ((n[x] >= '0' && n[x] <= '9') || n[x] == 'x' || n[x] == 'X'); --x) ;
+		for (x = obj_len(n) - 1; x > 0 && ((n[x] >= '0' && n[x] <= '9') || n[x] == 'x' || n[x] == 'X'); --x) ;
 		if (n[x] == ',' && x && n[x-1] != '\\') {
 			n[x] = 0;
 
@@ -2516,7 +2514,7 @@ char *parsens(const char *s, off_t *skip, off_t *amnt)
 			--x;
 			if (x > 0 && n[x] >= '0' && n[x] <= '9') {
 				for (; x > 0 && ((n[x] >= '0' && n[x] <= '9') || n[x] == 'x' || n[x] == 'X'); --x) ;
-				if (n[x] == ',' && x && n[x-1]!='\\') {
+				if (n[x] == ',' && x && n[x-1] != '\\') {
 					n[x] = 0;
 					*amnt = *skip;
 					*skip = ztoo(n + x + 1);
@@ -2555,8 +2553,7 @@ char *canonical(char *n)
 
 				s = getenv("HOME");
 				z = vsncpy(NULL, 0, sz(s));
-				z = vsncpy(z, sLEN(z), sz(n + x));
-				vsrm(n);
+				z = vsncpy(sv(z), sz(n + x));
 				n = z;
 				y = 0;
 			} else {
@@ -2566,11 +2563,9 @@ char *canonical(char *n)
 				passwd = getpwnam((n + y + 1));
 				n[x] = '/';
 				if (passwd) {
-					char *z = vsncpy(NULL, 0,
-							 sz((passwd->pw_dir)));
+					char *z = vsdupz(passwd->pw_dir);
 
-					z = vsncpy(z, sLEN(z), sz(n + x));
-					vsrm(n);
+					z = vscatz(z, n + x);
 					n = z;
 					y = 0;
 				}
@@ -2578,11 +2573,9 @@ char *canonical(char *n)
 		}
 	}
 #endif
-	if (y) {
-		char *z = vsncpy(NULL, 0, n + y, zlen(n + y));
-		vsrm(n);
-		return z;
-	} else
+	if (y)
+		return vsncpy(NULL, 0, n + y, zlen(n + y));
+	else
 		return n;
 }
 
@@ -2882,9 +2875,6 @@ opnerr:
 		prm(p);
 	}
 
-	/* Eliminate parsed name */
-	vsrm(n);
-
 	b->er = berror;
 	return b;
 }
@@ -3130,10 +3120,8 @@ int bsave(P *p, const char *as, off_t size, int flag)
 			/* Try to copy permissions */
 			if (!lstat(dequote(s),&lsbuf)) {
 				int g;
-				if (!break_symlinks && S_ISLNK(lsbuf.st_mode)) {
+				if (!break_symlinks && S_ISLNK(lsbuf.st_mode))
 					goto nobreak;
-				}
-
 #ifdef WITH_SELINUX
 				security_context_t se;
 				if (selinux_enabled == -1)
@@ -3275,24 +3263,26 @@ char *brs(P *p, ptrdiff_t size)
 	return brmem(p, s, size);
 }
 
-char *brvs(P *p, ptrdiff_t size)
+char *brvs(char *s, P *p, ptrdiff_t size)
 {
-	char *s = vstrunc(NULL, size);
+	s = vstrunc(s, size);
 
 	return brmem(p, s, size);
 }
 
-char *brzs(P *p, char *buf, ptrdiff_t size)
+char *brzs(char *buf, P *p)
 {
 	P *q=pdup(p, "brzs");
+	size_t size;
+	
 	p_goto_eol(q);
-
-	if(q->byte-p->byte<size)
-		size = TO_DIFF_OK(q->byte - p->byte);
-
+        size = q->byte - p->byte;
 	prm(q);
+	
+	buf = vsensure(buf, size);
 	brmem(p,buf,size);
 	buf[size]=0;
+	obj_len(buf) = size;
 	return buf;
 }
 
@@ -3337,6 +3327,7 @@ RETSIGTYPE ttsig(int sig)
 	if ((ttsig_f = fdopen(tmpfd, "a")) == NULL)
 		_exit(1);
 
+	/* Do not use joe_gettext() here or you might get an infinite loop */
 	fprintf(ttsig_f, "\n*** These modified files were found in JOE when it aborted on %s", ctime(&tim));
 	if (sig == -2)
 		fprintf(ttsig_f, "*** JOE was aborted due to swap file I/O error\n");
@@ -3390,18 +3381,17 @@ int lock_it(const char *qpath,char *bf)
         char *path = dequote(qpath);
 	char *lock_name=dirprt(path);
 	char *name=namprt(path);
-	char buf[1024];
+	char *buf;
 	const char *user = getenv("USER");
 	const char *host = getenv("HOSTNAME");
 	if (!user) user="me";
 	if (!host) host="here";
-	lock_name=vsncpy(sv(lock_name),sc(".#"));
-	lock_name=vsncpy(sv(lock_name),sv(name));
-	joe_snprintf_3(buf,SIZEOF(buf),"%s@%s.%ld",user,host,(long)getpid());
+	lock_name=vscat(lock_name,sc(".#"));
+	lock_name=vscat(lock_name,sv(name));
+	buf=vsfmt(NULL,0,"%s@%s.%d",user,host,getpid());
 	/* Fail only if there was an existing lock */
 	if (!symlink(buf,lock_name) || errno != EEXIST) {
-		vsrm(lock_name);
-		vsrm(name);
+		obj_free(lock_name);
 		return 0;
 	}
 	if (bf) {
@@ -3409,8 +3399,7 @@ int lock_it(const char *qpath,char *bf)
 		if (len<0) len = 0;
 		bf[len] = 0;
 	}
-	vsrm(lock_name);
-	vsrm(name);
+	obj_free(lock_name);
 	return -1;
 }
 
@@ -3419,11 +3408,10 @@ void unlock_it(const char *qpath)
         char *path = dequote(qpath);
 	char *lock_name=dirprt(path);
 	char *name=namprt(path);
-	lock_name=vsncpy(sv(lock_name),sc(".#"));
-	lock_name=vsncpy(sv(lock_name),sv(name));
+	lock_name=vscat(lock_name,sc(".#"));
+	lock_name=vscat(lock_name,sv(name));
 	unlink(lock_name);
-	vsrm(lock_name);
-	vsrm(name);
+	obj_free(lock_name);
 }
 
 /* True if file is regular */

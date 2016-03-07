@@ -78,3 +78,11 @@ int joe_towupper(struct charmap *,int c);
 int joe_towlower(struct charmap *,int c);
 
 int unictrl(int c);
+
+/* Copy character from one string to another */
+
+void copy_c(char **d, const char **s);
+
+/* Get next character from string and advance it, locale dependent */
+
+int fwrd_c(struct charmap *map, const char **s, ptrdiff_t *len);

@@ -6,7 +6,7 @@
  *	This file is part of JOE (Joe's Own Editor)
  */
 
-/* Parse a character or escape sequence from ptr/len.
+/*
  * Returns with character or -256 and cat (if not NULL) filled in with a character class
  */
 int escape(int utf8, const char **ptr, ptrdiff_t *len, struct Cclass **cat);
