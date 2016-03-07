@@ -127,8 +127,8 @@ ERROR errnodes = { {&errnodes, &errnodes} };
 
 static void freeerr(ERROR *n)
 {
-	vsrm(n->file);
-	vsrm(n->msg);
+	obj_free(n->file);
+	obj_free(n->msg);
 	enquef(ERROR, link, &errnodes, n);
 }
 
@@ -158,7 +158,7 @@ static void parsedir(const char *s, char **rtn_dir)
 			char *t = *rtn_dir;
 			t = vstrunc(t, 0);
 			t = vsncpy(sv(t), u, v - u);
-			if (sLEN(t) && t[sLEN(t)-1] != '/')
+			if (vslen(t) && t[vslen(t)-1] != '/')
 				t = vsadd(t, '/');
 			*rtn_dir = t;
 		}
@@ -296,18 +296,18 @@ static int parseit(struct charmap *map,const char *s, off_t row,
 				err->file = vsncpy(NULL, 0, sv(current_dir));
 				err->file = vsncpy(sv(err->file), sv(name));
 				err->file = canonical(err->file);
-				vsrm(name);
 			} else {
 				err->file = name;
 			}
+			obj_perm(err->file);
 			err->org = err->line = line;
 			err->src = row;
 			err->msg = vsncpy(NULL, 0, sc("\\i"));
 			err->msg = vsncpy(sv(err->msg), sv(s));
+			obj_perm(err->msg);
 			enqueb(ERROR, link, &errors, err);
 			return 1;
-		} else
-			vsrm(name);
+		}
 	}
 	return 0;
 }
@@ -330,20 +330,17 @@ static off_t parserr(B *b)
 		p_goto_bol(p);
 
 		do {
-			char *s;
-
+			char *s = NULL;
 			pset(q, p);
 			p_goto_eol(p);
-			s = brvs(q, p->byte - q->byte);
+			s = brvs(s, q, p->byte - q->byte);
 			if (s) {
 				kill_ansi(s);
 				parsedir(s, &curdir);
 				nerrs += parseit(q->b->o.charmap, s, q->line, (q->b->parseone ? q->b->parseone : parseone), (curdir ? curdir : q->b->current_dir));
-				vsrm(s);
 			}
 			pgetc(p);
 		} while (p->byte < markk->byte);
-		vsrm(curdir);
 		prm(p);
 		prm(q);
 		return nerrs;
@@ -356,19 +353,17 @@ static off_t parserr(B *b)
 
 		freeall();
 		do {
-			char *s;
+			char *s = NULL;
 
 			pset(q, p);
 			p_goto_eol(p);
-			s = brvs(q, p->byte - q->byte);
+			s = brvs(s, q, p->byte - q->byte);
 			if (s) {
 				kill_ansi(s);
 				parsedir(s, &curdir);
 				nerrs += parseit(q->b->o.charmap, s, q->line, (q->b->parseone ? q->b->parseone : parseone), (curdir ? curdir : q->b->current_dir));
-				vsrm(s);
 			}
 		} while (pgetc(p) != NO_MORE_DATA);
-		vsrm(curdir);
 		prm(p);
 		prm(q);
 		return nerrs;
@@ -409,43 +404,46 @@ int parserrb(B *b)
 	unmark(bw->parent, 0);
 	n = parserr(b);
 	if (n)
-		joe_snprintf_1(msgbuf, JOE_MSGBUFSIZE, joe_gettext(_("%d messages found")), (int)n);
+		msgnw(bw->parent, vsfmt(NULL, 0, joe_gettext(_("%d messages found")), (int)n));
 	else
-		joe_snprintf_0(msgbuf, SIZEOF(msgbuf), joe_gettext(_("No messages found")));
-	msgnw(bw->parent, msgbuf);
+		msgnw(bw->parent, joe_gettext(_("No messages found")));
 	return 0;
 }
 
 int urelease(W *w, int k)
 {
+	const char *msg;
 	BW *bw;
+	
 	WIND_BW(bw, w);
 	bw->b->parseone = 0;
 	if (qempty(ERROR, link, &errors) && !errbuf) {
-		joe_snprintf_0(msgbuf, SIZEOF(msgbuf), joe_gettext(_("No messages")));
+		msg = joe_gettext(_("No messages"));
 	} else {
 		int count = freeall();
 		errbuf = NULL;
-		joe_snprintf_1(msgbuf, SIZEOF(msgbuf), joe_gettext(_("%d messages cleared")), count);
+		msg = vsfmt(NULL, 0, joe_gettext(_("%d messages cleared")), count);
 	}
-	msgnw(bw->parent, msgbuf);
+	msgnw(bw->parent, msg);
 	updall();
 	return 0;
 }
 
 int uparserr(W *w, int k)
 {
+	const char *msg;
 	off_t n;
 	BW *bw;
+	
 	WIND_BW(bw, w);
 	freeall();
 	bw->b->parseone = parseone;
 	n = parserr(bw->b);
 	if (n)
-		joe_snprintf_1(msgbuf, JOE_MSGBUFSIZE, joe_gettext(_("%d messages found")), (int)n);
+		msg = vsfmt(NULL, 0, joe_gettext(_("%d messages found")), (int)n);
 	else
-		joe_snprintf_0(msgbuf, SIZEOF(msgbuf), joe_gettext(_("No messages found")));
-	msgnw(bw->parent, msgbuf);
+		msg = joe_gettext(_("No messages found"));
+	msgnw(bw->parent, msg);
 	return 0;
 }
 
@@ -458,10 +456,9 @@ int ugparse(W *w, int k)
 	bw->b->parseone = parseone_grep;
 	n = parserr(bw->b);
 	if (n)
-		joe_snprintf_1(msgbuf, JOE_MSGBUFSIZE, joe_gettext(_("%d messages found")), (int)n);
+		msgnw(bw->parent, vsfmt(NULL, 0, joe_gettext(_("%d messages found")), (int)n));
 	else
-		joe_snprintf_0(msgbuf, SIZEOF(msgbuf), joe_gettext(_("No messages found")));
-	msgnw(bw->parent, msgbuf);
+		msgnw(bw->parent, joe_gettext(_("No messages found")));
 	return 0;
 }
 
@@ -469,7 +466,7 @@ static int jump_to_file_line(BW *bw,char *file,off_t line,char *msg)
 {
 	int omid;
 	if (!bw->b->name || zcmp(file, bw->b->name)) {
-		if (doswitch(bw->parent, vsdup(file), NULL, NULL))
+		if (doswitch(bw->parent, vsdup(file)))
 			return -1;
 		bw = (BW *) maint->curwin->object;
 	}
@@ -479,7 +476,8 @@ static int jump_to_file_line(BW *bw,char *file,off_t line,char *msg)
 	dofollows();
 	opt_mid = omid;
 	bw->cursor->xcol = piscol(bw->cursor);
-	msgnw(bw->parent, msg);
+	if (msg)
+		msgnw(bw->parent, msg);
 	return 0;
 }
 
@@ -544,11 +542,10 @@ int ujump(W *w, int k)
 	while (p->line != bw->cursor->line) {
 		pset(q, p);
 		p_goto_eol(p);
-		s = brvs(q, p->byte - q->byte);
+		s = brvs(NULL, q, p->byte - q->byte);
 		if (s) {
 			kill_ansi(s);
 			parsedir(s, &curdir);
-			vsrm(s);
 		}
 		if (NO_MORE_DATA == pgetc(p))
 			break;
@@ -559,7 +556,7 @@ int ujump(W *w, int k)
 	pset(q, bw->cursor);
 	p_goto_bol(p);
 	p_goto_eol(q);
-	s = brvs(p, q->byte - p->byte);
+	s = brvs(NULL, p, q->byte - p->byte);
 	prm(p);
 	prm(q);
 	if (s) {
@@ -578,7 +575,6 @@ int ujump(W *w, int k)
 		else
 			fullname = vsncpy(NULL, 0, sv(curd));
 		fullname = vsncpy(sv(fullname), sv(name));
-		vsrm(name);
 		name = canonical(fullname);
 		if (name && line != -1) {
 			ERROR *er = srcherr(bw, name, line);
@@ -588,11 +584,8 @@ int ujump(W *w, int k)
 				rtn = jump_to_file_line((BW *)maint->curwin->object,name,er->line,NULL /* p->msg */);
 			else
 				rtn = jump_to_file_line((BW *)maint->curwin->object,name,line,NULL);
-			vsrm(name);
 		}
-		vsrm(s);
 	}
-	vsrm(curdir);
 	return rtn;
 }
 

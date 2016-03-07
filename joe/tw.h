@@ -5,6 +5,8 @@
  *
  *	This file is part of JOE (Joe's Own Editor)
  */
+#ifndef _JOE_TW_H
+#define _JOE_TW_H 1
 
 /* Text window (a BW) */
 
@@ -30,10 +32,12 @@ int uabort(W *w, int k);
 int uabort1(W *w, int k);
 void setline(B *b, off_t line);
 int abortit(W *w, int k);
+char *stagen(char *stalin, BW *bw, const char *s, char fill);
 extern int staen;
 extern int staupd;
 extern int keepup;
 extern int bg_stalin;
 
 extern WATOM watomtw;
-char *stagen(char *stalin, BW *bw, const char *s, char fill);
+
+#endif

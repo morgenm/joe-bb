@@ -35,20 +35,15 @@ const char *my_gettext(const char *s)
 		return s;
 }
 
-/* Load a .po file, convert entries to local character set and add them to
- * hash table */
-
 static int load_po(FILE *f)
 {
-	char buf[1024];
-	char msgid[1024];
-	char msgstr[1024];
-	char bf[8192];
+	char *buf = 0;
+	char *msgid = vsdupz("");
+	char *msgstr = vsdupz("");
 	struct charmap *po_map = locale_map;
 	int preload_flag = 0;
-	msgid[0] = 0;
-	msgstr[0] = 0;
-	while (preload_flag || fgets(buf,SIZEOF(buf)-1,f)) {
+
+	while (preload_flag || vsgets(isfree(&buf), f)) {
 		const char *p;
 		preload_flag = 0;
 		p = buf;
@@ -56,14 +51,16 @@ static int load_po(FILE *f)
 		if (!parse_field(&p, "msgid")) {
 			ptrdiff_t ofst = 0;
 			ptrdiff_t len;
-			msgid[0] = 0;
+			char *bf = 0;
+			msgid = vscpyz(msgid, "");
 			parse_ws(&p, '#');
-			while ((len = parse_string(&p, msgid + ofst, SIZEOF(msgid)-ofst)) >= 0) {
+			while ((len = parse_string(&p, &bf)) >= 0) {
+				msgid = vscat(msgid, sv(bf));
 				preload_flag = 0;
 				ofst += len;
 				parse_ws(&p, '#');
 				if (!*p) {
-					if (fgets(buf,SIZEOF(buf) - 1,f)) {
+					if (vsgets(&buf, f)) {
 						p = buf;
 						preload_flag = 1;
 						parse_ws(&p, '#');
@@ -75,14 +72,16 @@ static int load_po(FILE *f)
 		} else if (!parse_field(&p, "msgstr")) {
 			ptrdiff_t ofst = 0;
 			ptrdiff_t len;
-			msgstr[0] = 0;
+			char *bf = 0;
+			msgstr = vscpyz(msgstr, "");
 			parse_ws(&p, '#');
-			while ((len = parse_string(&p, msgstr + ofst, SIZEOF(msgstr)-ofst)) >= 0) {
+			while ((len = parse_string(&p, &bf)) >= 0) {
+				msgstr = vscat(msgstr, sv(bf));
 				preload_flag = 0;
 				ofst += len;
 				parse_ws(&p, '#');
 				if (!*p) {
-					if (fgets(buf,SIZEOF(buf) - 1,f)) {
+					if (vsgets(&buf, f)) {
 						p = buf;
 						preload_flag = 1;
 						parse_ws(&p, '#');
@@ -93,11 +92,13 @@ static int load_po(FILE *f)
 			}
 			if (msgid[0] && msgstr[0]) {
 				/* Convert to locale character map */
-				my_iconv(bf, SIZEOF(bf), locale_map,msgstr,po_map);
+				char *bf = my_iconv(NULL,locale_map,msgstr,po_map);
 				/* Add to hash table */
 				htadd(gettext_ht, zdup(msgid), zdup(bf));
 			} else if (!msgid[0] && msgstr[0]) {
 				char *tp = zstr(msgstr, "charset=");
+				msgid = vscpyz(msgid, msgstr); /* Make sure msgid is long enough */
+				msgid = vscpyz(msgid, ""); /* Truncate it */
 				if (tp) {
 					/* Copy character set name up to next delimiter */
 					int x;
@@ -116,6 +117,7 @@ static int load_po(FILE *f)
 	}
 	bye:
 	fclose(f);
+	obj_free(msgid);
 	return 0;
 }
 
@@ -124,18 +126,18 @@ static int load_po(FILE *f)
 void init_gettext(const char *s)
 {
 	FILE *f;
-	char buf[1024];
-	joe_snprintf_2(buf, SIZEOF(buf), "%slang/%s.po",JOEDATA,s);
+	char *buf = vsfmt(NULL,0, "%slang/%s.po",JOEDATA,s);
 	if ((f = fopen(buf, "r"))) {
 		/* Try specific language, like en_GB */
 		gettext_ht = htmk(256);
 		load_po(f);
 	} else if (s[0] && s[1]) {
 		/* Try generic language, like en */
-		joe_snprintf_3(buf, SIZEOF(buf), "%slang/%c%c.po",JOEDATA,s[0],s[1]);
-		if ((f = fopen(buf, "r"))) {
+		char *bf = vsfmt(NULL,0,"%slang/%c%c.po",JOEDATA,s[0],s[1]);
+		if ((f = fopen(bf, "r"))) {
 			gettext_ht = htmk(256);
 			load_po(f);
 		}
 	}
+	obj_free(buf);
 }
