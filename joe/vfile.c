@@ -237,7 +237,8 @@ char *name;
 	struct stat buf;
 	VFILE *newf = (VFILE *) joe_malloc(SIZEOF(VFILE));
 
-	newf->name = vsncpy(NULL, 0, sz(name));
+	newf->name = vsdupz(name);
+	obj_perm(newf->name);
 	newf->fd = open(name, O_RDWR);
 	if (!newf->fd) {
 		fprintf(stderr, joe_gettext(_("Couldn\'t open file \'%s\'\n")), name);
@@ -277,7 +278,7 @@ void vclose(VFILE *vfile)
 			unlink(vfile->name);
 		} else
 			vflshf(vfile);
-		vsrm(vfile->name);
+		obj_free(vfile->name);
 	}
 	if (vfile->fd)
 		close(vfile->fd);
@@ -617,7 +618,6 @@ char *s;
 
 	/* Return with NULL if at end of file */
 	if (vtell(v) == vsize(v)) {
-		vsrm(s);
 		return NULL;
 	}
 

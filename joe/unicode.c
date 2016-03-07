@@ -582,3 +582,31 @@ int unictrl(int ucs)
 {
 	return !cclass_lookup(cclass_print, ucs);
 }
+
+/* Copy character from one string to another */
+
+void copy_c(char **d, const char **s)
+{
+	if (locale_map->type) {
+		*d += utf8_encode(*d, utf8_decode_fwrd(s, NULL));
+	} else if (**s) {
+		**d = **s;
+		(*s)++;
+		(*d)++;
+	}
+}
+
+/* Get next character from string and advance it, locale dependent */
+
+int fwrd_c(struct charmap *map, const char **s, ptrdiff_t *len)
+{
+	if (map->type)
+		return utf8_decode_fwrd(s, len);
+	else {
+		int c = *(const unsigned char *)*s;
+		*s = *s + 1;
+		if (len)
+			*len = *len - 1;
+		return c;
+	}
+}
