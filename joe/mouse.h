@@ -50,6 +50,12 @@ int udefm2drag(W *, int);
 int udefm3down(W *, int);
 int udefm3up(W *, int);
 int udefm3drag(W *, int);
+int udefmrdown (W *, int);
+int udefmrup (W *, int);
+int udefmrdrag (W *, int);
+int udefmmdown (W *, int);
+int udefmmup (W *, int);
+int udefmmdrag (W *, int);
 
 long mnow();
 void reset_trig_time();

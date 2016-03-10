@@ -63,6 +63,12 @@ CMD cmds[] = {
 	{"defm3down", TYPETW+TYPEPW, udefm3down, 0, 0, 0 },
 	{"defm3up", TYPETW+TYPEPW, udefm3up, 0, 0, 0 },
 	{"defm3drag", TYPETW+TYPEPW, udefm3drag, 0, 0, 0 },
+	{"defmrdown", TYPETW+TYPEPW, udefmrdown, 0, 0, 0 },
+	{"defmrup", TYPETW+TYPEPW, udefmrup, 0, 0, 0 },
+	{"defmrdrag", TYPETW+TYPEPW, udefmrdrag, 0, 0, 0 },
+	{"defmmdown", TYPETW+TYPEPW, udefmmdown, 0, 0, 0 },
+	{"defmmup", TYPETW+TYPEPW, udefmmup, 0, 0, 0 },
+	{"defmmdrag", TYPETW+TYPEPW, udefmmdrag, 0, 0, 0 },
 	{"delbol", TYPETW + TYPEPW + EFIXXCOL + EKILL + EMOD, udelbl, NULL, 1, "deleol"},
 	{"delch", TYPETW + TYPEPW + ECHKXCOL + EFIXXCOL + EMINOR + EKILL + EMOD, udelch, NULL, 1, "backs"},
 	{"deleol", TYPETW + TYPEPW + EKILL + EMOD, udelel, NULL, 1, "delbol"}, 
@@ -214,6 +220,13 @@ CMD cmds[] = {
 	{"upslide", TYPETW + TYPEPW + TYPEMENU + TYPEQW + EMOVE, uupslide, NULL, 1, "dnslide"},
 	{"upslidemenu", TYPEMENU, umscrup, NULL, 1, "dnslidemenu"},
 	{"vtbknd", TYPETW, uvtbknd, NULL, 0, NULL},
+#ifdef JOEWIN
+	{"winblkcpy", TYPETW + TYPEPW + EFIXXCOL + EMOD + EBLOCK, uwinblkcpy, NULL, 0, NULL},
+	{"wincontext", TYPETW + TYPEPW + TYPEQW + TYPEMENU, uwincontext, NULL, 0, NULL},
+	{"wincopy", TYPETW + TYPEPW + EBLOCK, uwincopy, NULL, 0, NULL},
+	{"winrawvt", TYPETW + TYPEPW, uwinrawvt, NULL, 0, NULL },
+	{"winpaste", TYPETW + TYPEPW + EFIXXCOL + EMOD + EBLOCK, uwinpaste, NULL, 0, NULL},
+#endif
 	{"xtmouse", TYPETW+TYPEPW+TYPEMENU+TYPEQW, uxtmouse, 0, 0, 0 },
 	{"yank", TYPETW + TYPEPW + EFIXXCOL + EMOD, uyank, NULL, 1, NULL},
 	{"yapp", TYPETW + TYPEPW + EKILL, uyapp, NULL, 0, NULL},
@@ -298,6 +311,9 @@ int modify_logic(BW *bw,B *b)
 			b->didfirst = 1;
 			if (bw->o.mfirst)
 				exmacro(bw->o.mfirst, 1, NO_MORE_DATA);
+#ifdef JOEWIN
+			notify_changed_buffer(b);
+#endif
 		}
 		if (b->rdonly) {
 			msgnw(bw->parent,joe_gettext(_("Other buffer is read only")));
@@ -313,6 +329,9 @@ int modify_logic(BW *bw,B *b)
 			b->didfirst = 1;
 			if (bw->o.mfirst)
 				exmacro(bw->o.mfirst, 1, NO_MORE_DATA);
+#ifdef JOEWIN
+			notify_changed_buffer(b);
+#endif
 		}
 		if (b->rdonly) {
 			msgnw(bw->parent,joe_gettext(_("Read only")));
@@ -362,7 +381,7 @@ int execmd(CMD *cmd, int k)
 	if ((maint->curwin->watom->what & TYPETW) && bw->b->pid && !bw->b->vt && piseof(bw->cursor) &&
 	(k==3 || k==9 || k==13 || k==8 || k==127 || k==4 || (cmd->func==utype /* && k>=32 && k<256 */))) {
 		char c = k;
-		joe_write(bw->b->out, &c, 1);
+		writempx(bw->b->out, &c, 1);
 		return 0;
 	}
 #endif
@@ -535,10 +554,12 @@ int uexecmd(W *w, int k)
 {
 	BW *bw;
 	MACRO *mac;
+	ptrdiff_t ret = -1;
+	char *s;
+
 	WIND_BW(bw, w);
 	
-	ptrdiff_t ret = -1;
-	char *s = ask(w, joe_gettext(_("Command: ")),
+	s = ask(w, joe_gettext(_("Command: ")),
 		&cmdhist, _("cmd"), cmdcmplt, utf8_map, 0, 0, NULL);
 	
 	if (s) {

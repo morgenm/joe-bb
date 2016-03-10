@@ -5,6 +5,12 @@
  *
  *	This file is part of JOE (Joe's Own Editor)
  */
+
+#ifdef JOEWIN
+// Needs to come before joe_redefines.h
+#include <direct.h>
+#endif
+
 #include "types.h"
 
 #ifdef HAVE_PWD_H
@@ -19,27 +25,29 @@
 #endif
 
 
-#ifdef HAVE_DIRENT_H
-#  include <dirent.h>
-#  define NAMLEN(dirent) zlen((dirent)->d_name)
-#else
-#  ifdef HAVE_SYS_DIRENT_H
-#    include <sys/dirent.h>
+#ifndef JOEWIN
+#  ifdef HAVE_DIRENT_H
+#    include <dirent.h>
 #    define NAMLEN(dirent) zlen((dirent)->d_name)
 #  else
-#    define direct dirent
-#    define NAMLEN(dirent) (dirent)->d_namlen
-#    ifdef HAVE_SYS_NDIR_H
-#      include <sys/ndir.h>
+#    ifdef HAVE_SYS_DIRENT_H
+#      include <sys/dirent.h>
+#      define NAMLEN(dirent) zlen((dirent)->d_name)
 #    else
-#      ifdef HAVE_SYS_DIR_H
-#        include <sys/dir.h>
+#      define direct dirent
+#      define NAMLEN(dirent) (dirent)->d_namlen
+#      ifdef HAVE_SYS_NDIR_H
+#        include <sys/ndir.h>
 #      else
-#        ifdef HAVE_NDIR_H
-#          include <ndir.h>
+#        ifdef HAVE_SYS_DIR_H
+#          include <sys/dir.h>
 #        else
-#          ifndef __MSDOS__
-#            include "dir.c"
+#          ifdef HAVE_NDIR_H
+#            include <ndir.h>
+#          else
+#            ifndef __MSDOS__
+#              include "dir.c"
+#            endif
 #          endif
 #        endif
 #      endif
@@ -47,7 +55,7 @@
 #  endif
 #endif
 
-#ifdef __MSDOS__	/* paths in MS-DOS can include a drive letter followed by semicolon */
+#if defined(__MSDOS__) || defined(JOEWIN)	/* paths in MS-DOS can include a drive letter followed by semicolon */
 #define	do_if_drive_letter(path, command) do { \
 						if ((path)[0] && (path)[1] == ':') { \
 							command; \
@@ -59,7 +67,7 @@
 #define skip_drive_letter(path)	do_if_drive_letter((path), (path) += 2)
 
 #ifndef		_PATH_TMP
-#  ifdef __MSDOS__
+#  if defined(__MSDOS__) || defined(JOEWIN)
 #    define	_PATH_TMP	""
 #  else
 #    define	_PATH_TMP	"/tmp/"
@@ -74,7 +82,7 @@
 /********************************************************************/
 char *joesep(char *path)
 {
-#ifdef __MSDOS__
+#if defined(__MSDOS__) || defined(JOEWIN)
 	int x;
 
 	for (x = 0; path[x]; ++x)
@@ -90,7 +98,7 @@ char *namprt(const char *path)
 
 	skip_drive_letter(path);
 	z = path + zlen(path);
-	while ((z != path) && (z[-1] != '/'))
+	while ((z != path) && !ISDIRSEP(z[-1]))
 		--z;
 	return vsncpy(NULL, 0, sz(z));
 }
@@ -101,7 +109,7 @@ char *namepart(char *tmp, ptrdiff_t tmpsiz, const char *path)
 
 	skip_drive_letter(path);
 	z = path + zlen(path);
-	while ((z != path) && (z[-1] != '/'))
+	while ((z != path) && !ISDIRSEP(z[-1]))
 		--z;
 	return zlcpy(tmp, tmpsiz, z);
 }
@@ -112,7 +120,7 @@ char *dirprt(const char *path)
 	const char *z = path + zlen(path);
 
 	skip_drive_letter(b);
-	while ((z != b) && (z[-1] != '/'))
+	while ((z != b) && !ISDIRSEP(z[-1]))
 		--z;
 	return vsncpy(NULL, 0, path, z - path);
 }
@@ -123,12 +131,12 @@ char *begprt(const char *path)
 	int drv = 0;
 
 	do_if_drive_letter(path, drv = 2);
-	while ((z != path + drv) && (z[-1] == '/'))
+	while ((z != path + drv) && ISDIRSEP(z[-1]))
 		--z;
 	if (z == path + drv)
 		return vsncpy(NULL, 0, sz(path));
 	else {
-		while ((z != path + drv) && (z[-1] != '/'))
+		while ((z != path + drv) && !ISDIRSEP(z[-1]))
 			--z;
 		return vsncpy(NULL, 0, path, z - path);
 	}
@@ -140,12 +148,12 @@ char *endprt(const char *path)
 	int drv = 0;
 
 	do_if_drive_letter(path, drv = 2);
-	while ((z != path + drv) && (z[-1] == '/'))
+	while ((z != path + drv) && ISDIRSEP(z[-1]))
 		--z;
-	if (z == path + drv)
+		if (z == path + drv)
 		return vsncpy(NULL, 0, sc(""));
 	else {
-		while (z != path + drv && z[-1] != '/')
+		while (z != path + drv && !ISDIRSEP(z[-1]))
 			--z;
 		return vsncpy(NULL, 0, sz(z));
 	}
@@ -155,7 +163,7 @@ int mkpath(char *path)
 {
 	char *s;
 
-	if (path[0] == '/') {
+	if (ISDIRSEP(path[0])) {
 		if (chddir("/"))
 			return 1;
 		s = path;
@@ -165,18 +173,18 @@ int mkpath(char *path)
 	while (path[0]) {
 		char c;
 
-		for (s = path; (*s) && (*s != '/'); s++) ;
+		for (s = path; (*s) && !ISDIRSEP(*s); s++) ;
 		c = *s;
 		*s = 0;
 		if (chddir(path)) {
 			if (mkdir(path, 0777))
-				return 1;
+			return 1;
 			if (chddir(path))
 				return 1;
 		}
 		*s = c;
 	      in:
-		while (*s == '/')
+		while (ISDIRSEP(*s))
 			++s;
 		path = s;
 	}
@@ -231,7 +239,7 @@ char *mktmp(const char *where)
 	return name;
 }
 /********************************************************************/
-int rmatch(const char *a, const char *b)
+int rmatch(const char *a, const char *b, int fs)
 {
 	int flag, inv, c;
 
@@ -240,7 +248,7 @@ int rmatch(const char *a, const char *b)
 		case '*':
 			++a;
 			do {
-				if (rmatch(a, b))
+				if (rmatch(a, b, fs))
 					return 1;
 			} while (*b++);
 			return 0;
@@ -257,9 +265,10 @@ int rmatch(const char *a, const char *b)
 					flag = 1;
 			while (*a && (c = *(const unsigned char *)a++) != ']')
 				if ((c == '-') && (a[-2] != '[') && (*a)) {
-					if ((*(const unsigned char *)b >= ((const unsigned char *)a)[-2]) && (*(const unsigned char *)b <= *(const unsigned char *)a))
+					if ((fs && (MATCHCANON(*(const unsigned char *)b) >= MATCHCANON(((const unsigned char *)a)[-2])) && (MATCHCANON(*(const unsigned char *)b) <= MATCHCANON(*(const unsigned char *)a))) ||
+						(!fs && (*(const unsigned char *)b >= ((const unsigned char *)a)[-2]) && (*(const unsigned char *)b <= *(const unsigned char *)a)))
 						flag = 1;
-				} else if (*(const unsigned char *)b == c)
+				} else if ((fs && MATCHCANON(*(const unsigned char *)b) == MATCHCANON(c)) || (!fs && *(const unsigned char *)b == c))
 					flag = 1;
 			if ((!flag && !inv) || (flag && inv) || (!*b))
 				return 0;
@@ -277,7 +286,7 @@ int rmatch(const char *a, const char *b)
 			else
 				return 0;
 		default:
-			if (*a++ != *b++)
+			if ((fs && MATCHCANON(*a++) != MATCHCANON(*b++)) || (!fs && *a++ != *b++))
 				return 0;
 		}
 }
@@ -335,7 +344,7 @@ struct direct *readdir()
 /********************************************************************/
 char **rexpnd(const char *word)
 {
-	DIR *dir;
+	struct dirent *dir;
 	char **lst = NULL;
 
 	struct dirent *de;
@@ -343,7 +352,7 @@ char **rexpnd(const char *word)
 	if (dir) {
 		while ((de = readdir(dir)) != NULL)
 			if (zcmp(".", de->d_name))
-				if (rmatch(word, de->d_name))
+				if (rmatch(word, de->d_name, 1))
 					lst = vaadd(lst, vsncpy(NULL, 0, sz(de->d_name)));
 		closedir(dir);
 	}
@@ -353,22 +362,25 @@ char **rexpnd(const char *word)
 char **rexpnd_users(const char *word)
 {
 	char **lst = NULL;
+
+#ifndef JOEWIN
 	struct passwd *pw;
 
 	while((pw=getpwent()))
-		if (rmatch(word+1, pw->pw_name)) {
+		if (rmatch(word+1, pw->pw_name, 1)) {
 			char *t = vsncpy(NULL,0,sc("~"));
 			lst = vaadd(lst, vsncpy(sv(t),sz(pw->pw_name)));
 			}
 	endpwent();
+#endif
 
 	return lst;
 }
 /********************************************************************/
 int chpwd(const char *path)
 {
-#ifdef __MSDOS__
-	char buf[256];
+#if defined(__MSDOS__) || defined(JOEWIN)
+	char buf[1024];
 	int x;
 
 	if (!path)
@@ -418,6 +430,9 @@ char *pwd(void)
 
 char *simplify_prefix(const char *s)
 {
+#ifdef JOEWIN
+	return vsncpy(NULL,0,sz(s));
+#else
 	const char *t = getenv("HOME");
 	char *n;
 
@@ -443,4 +458,5 @@ char *simplify_prefix(const char *s)
 		n = vsncpy(NULL,0,sz(s));
 	}
 	return n;
+#endif
 }

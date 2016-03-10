@@ -438,7 +438,7 @@ done
 	"throw"			kw
 	"try"			kw
 	"var"			kw
-	"void"			kw
+	"void"			voidkw
 	"while"			kw
 	"with"			kw
 	"false"			lit
@@ -531,7 +531,7 @@ done
 	"throw"			kw
 	"try"			kw
 	"var"			kw
-	"void"			kw
+	"void"			voidkw
 	"while"			kw
 	"with"			kw
 	"false"			lit
@@ -589,7 +589,10 @@ done
 	*			after_term	noeat
 
 :kw Keyword
-	*			idle	noeat
+	*			after_term	noeat
+
+:voidkw Keyword
+	*			idle		noeat
 
 :quasikw Keyword
 	*			after_term	noeat

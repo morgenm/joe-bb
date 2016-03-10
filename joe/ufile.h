@@ -8,7 +8,7 @@
 
 extern int exask; /* Ask for file name during ^K X */
 
-void genexmsg(BW *bw, int saved, char *name);
+void genexmsg(BW *bw, int saved, const char *name);
 
 int ublksave(W *w, int k);
 int ushell(W *w, int k);
@@ -46,3 +46,8 @@ int yncheck(const char *string, int c);
 
 int ureload(W *w, int k);
 int ureload_all(W *w, int k);
+
+#ifdef JOEWIN
+int dodropfiles (va_list);
+#endif
+

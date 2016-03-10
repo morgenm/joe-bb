@@ -554,8 +554,10 @@ int uformat(W *w, int k)
 	int c;
 	P *p, *q;
 	BW *bw;
-	WIND_BW(bw, w);
 	int flag;
+	
+	WIND_BW(bw, w);
+
 
 	p = pdup(bw->cursor, "uformat");
 	p_goto_bol(p);
@@ -769,6 +771,10 @@ int uformat(W *w, int k)
 			flag = 1;
 		}
 	}
+
+	if (flag && piscol(p) > bw->o.rmargin)
+		wrapword(bw, p, indent, bw->o.french, 1, indents);
+
 
 	if (flag && piscol(p) > bw->o.rmargin)
 		wrapword(bw, p, indent, bw->o.french, 1, indents);

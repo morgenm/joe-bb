@@ -14,7 +14,7 @@ struct vt_context {
 	enum vt_state state;
 
 	/* Record attribute sequence */
-	char buf[100];
+	char buf[512];
 	ptrdiff_t bufx;
 
 	/* Numeric arguments */

@@ -74,7 +74,11 @@ static int get_entries(TAB *tab, ino_t prv)
 	varm(tab->files);
 	tab->files = files;
 	vaperm(tab->files);
+#ifdef JOEWIN
+	vaisort(files, tab->len);
+#else
 	vasort(files, tab->len);
+#endif
 	if (tab->type)
 		joe_free(tab->type);
 	tab->type = (char *)joe_malloc(tab->len);
@@ -109,15 +113,24 @@ static void insnam(BW *bw, char *path, char *nam, int dir, off_t ofst)
 	if (vslen(path)) {
 		binsm(bw->cursor, sv(path));
 		p_goto_eol(bw->cursor);
+#ifndef JOEWIN
 		if (path[vslen(path) - 1] != '/') {
 			binsm(bw->cursor, sc("/"));
+#else
+		if (path[vslen(path) - 1] != '/' && path[vslen(path) - 1] != '\\') {
+			binsm(bw->cursor, sc("\\"));
+#endif
 			p_goto_eol(bw->cursor);
 		}
 	}
 	binsm(bw->cursor, sv(nam));
 	p_goto_eol(bw->cursor);
 	if (dir) {
+#ifndef JOEWIN
 		binsm(bw->cursor, sc("/"));
+#else
+		binsm(bw->cursor, sc("\\"));
+#endif
 		p_goto_eol(bw->cursor);
 	}
 	prm(p);
@@ -301,7 +314,11 @@ static P *p_goto_start_of_path(P *p)
 	
 	do
 		c = prgetc(p);
+#ifndef JOEWIN
 	while (c != NO_MORE_DATA && c != ' ' && c != '\n');
+#else
+	while (c!=NO_MORE_DATA && c!='\n');
+#endif
 	
 	if (c == ' ') {
 		P *q = pdup(p, "p_goto_start_of_path");

@@ -333,8 +333,9 @@ char *vsgets(char **sp, FILE *f)
 
 	for (i = 0;;) {
 		s_size = obj_size(s);
-		for (; i != s_size && ((c = getc(f), (c != -1 && c != '\n'))); ++i)
+		for (; i != s_size && ((c = getc(f), (c != -1 && c != '\n' && c != '\r'))); ++i)
 			s[i] = c;
+		if (c == '\r') getc(f);
 		if (i == s_size) {
 			s = vsensure(s, s_size * 2);
 		} else
@@ -935,6 +936,25 @@ void vasort(char **ary, int len)
 		return;
 	qsort(ary, len, SIZEOF(char *), (int (*)(const void *, const void *))_acmp);
 }
+
+#ifdef JOEWIN
+
+/* TODO: Do this in cross-platform manner, windows and older systems have stricmp, newer
+   ones have strcasecmp.  Only currently used in Windows, so I'll deal with it later. */
+
+static int _aicmp(char **a, char **b)
+{
+	return stricmp(*a, *b);
+}
+
+void vaisort(char **ary, int len)
+{
+	if (!ary || !len)
+		return;
+	qsort(ary, len, sizeof(char *), (int (*)(const void *, const void *))_aicmp);
+}
+
+#endif
 
 char **vawords(char **a, char *s, int len, char *sep, int seplen)
 {
