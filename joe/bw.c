@@ -11,6 +11,10 @@
 int dspasis = 0;
 int marking = 0;
 
+/* Selected text format */
+int selectatr = INVERSE;
+int selectmask = ~INVERSE;
+
 static P *getto(P *p, P *cur, P *top, off_t line)
 {
 
@@ -295,6 +299,7 @@ static void ansi_init(struct ansi_sm *sm)
 
 /* Update a single line */
 
+#define SELECT_IF(c)	{ if (c) { ca = selectatr; cm = selectmask; } else { ca = 0; cm = -1; } }
 static int lgen(SCRN *t, ptrdiff_t y, int (*screen)[COMPOSE], int *attr, ptrdiff_t x, ptrdiff_t w, P *p, off_t scr, off_t from, off_t to,HIGHLIGHT_STATE st,BW *bw)
         
       
@@ -324,6 +329,8 @@ static int lgen(SCRN *t, ptrdiff_t y, int (*screen)[COMPOSE], int *attr, ptrdiff
         P *tmp;
         int idx=0;
         int atr = BG_COLOR(bg_text); 
+	int ca = 0;		/* Additional attributes for current character */
+	int cm = -1;		/* Attribute mask for current character */
 
 	utf8_init(&utf8_sm);
 	ansi_init(&ansi_sm);
@@ -391,19 +398,13 @@ static int lgen(SCRN *t, ptrdiff_t y, int (*screen)[COMPOSE], int *attr, ptrdiff
 			if (square)
 				if (bc == '\t') {
 					off_t tcol = col + p->b->o.tab - col % p->b->o.tab;
-
-					if (tcol > from && tcol <= to)
-						c1 = INVERSE;
-					else
-						c1 = 0;
-				} else if (col >= from && col < to)
-					c1 = INVERSE;
-				else
-					c1 = 0;
-			else if (byte >= from && byte < to)
-				c1 = INVERSE;
-			else
-				c1 = 0;
+					SELECT_IF(tcol > from && tcol <= to);
+				} else {
+					SELECT_IF(col >= from && col < to);
+				}
+			else {
+				SELECT_IF(byte >= from && byte < to);
+			}
 			++byte;
 			if (bc == '\t') {
 				ta = p->b->o.tab - col % p->b->o.tab;
@@ -530,25 +531,20 @@ static int lgen(SCRN *t, ptrdiff_t y, int (*screen)[COMPOSE], int *attr, ptrdiff
 				if (bc == '\t') {
 					off_t tcol = scr + x - ox + p->b->o.tab - (scr + x - ox) % p->b->o.tab;
 
-					if (tcol > from && tcol <= to)
-						c1 = INVERSE;
-					else
-						c1 = 0;
-				} else if (scr + x - ox >= from && scr + x - ox < to)
-					c1 = INVERSE;
-				else
-					c1 = 0;
-			else if (byte >= from && byte < to)
-				c1 = INVERSE;
-			else
-				c1 = 0;
+					SELECT_IF(tcol > from && tcol <= to);
+				} else {
+					SELECT_IF(scr + x - ox >= from && scr + x - ox < to);
+				}
+			else {
+				SELECT_IF(byte >= from && byte < to);
+			}
 			++byte;
 			if (bc == '\t') {
 				ta = p->b->o.tab - (x - ox + scr) % p->b->o.tab;
 				tach = ' ';
 			      dota:
 			      	while (x < w && ta--) {
-					outatr(bw->b->o.charmap, t, screen + x, attr + x, x, y, tach, c1|atr);
+					outatr(bw->b->o.charmap, t, screen + x, attr + x, x, y, tach, (atr&cm)|ca);
 					++x;
 				}
 				if (ifhave)
@@ -607,12 +603,12 @@ static int lgen(SCRN *t, ptrdiff_t y, int (*screen)[COMPOSE], int *attr, ptrdiff
 					if (x + wid > w) {
 						/* If character hits right most column, don't display it */
 						while (x < w) {
-							outatr(bw->b->o.charmap, t, screen + x, attr + x, x, y, '>', c1|atr);
+							outatr(bw->b->o.charmap, t, screen + x, attr + x, x, y, '>', (atr&cm)|ca);
 							x++;
 						}
 						goto eosl;
 					} else {
-						outatr(bw->b->o.charmap, t, screen + x, attr + x, x, y, utf8_char, c1|atr);
+						outatr(bw->b->o.charmap, t, screen + x, attr + x, x, y, utf8_char, (atr&cm)|ca);
 						x += wid;
 					}
 				} else
@@ -1024,7 +1020,7 @@ static struct file_pos *find_file_pos(const char *name)
 {
 	struct file_pos *p;
 	for (p = file_pos.link.next; p != &file_pos; p = p->link.next)
-		if (!zcmp(p->name, name)) {
+		if (!fullfilecmp(p->name, name)) {
 			promote(struct file_pos,link,&file_pos,p);
 			return p;
 		}
@@ -1063,12 +1059,29 @@ void save_file_pos(FILE *f)
 {
 	struct file_pos *p;
 	for (p = file_pos.link.prev; p != &file_pos; p = p->link.prev) {
+#ifdef JOEWIN
+		wchar_t wpath[MAX_PATH + 1];
+		char zpath[PATH_MAX + 1];
+
 #ifdef HAVE_LONG_LONG
 		fprintf(f,"	%lld ",(long long)p->line);
 #else
 		fprintf(f,"	%ld ",(long)p->line);
 #endif
+
+		if (utf8towcs(wpath, p->name, MAX_PATH) || fixpath(wpath, MAX_PATH) || wcstoutf8(zpath, wpath, PATH_MAX))
+		{
+			/* Just do it the stupid way */
+			emit_string(f,p->name,zlen(p->name));
+		}
+		else
+		{
+			emit_string(f,zpath,zlen(zpath));
+		}
+#else
+		fprintf(f,"	%ld ",p->line);
 		emit_string(f,p->name,zlen(p->name));
+#endif
 		fprintf(f,"\n");
 	}
 	fprintf(f,"done\n");
@@ -1168,9 +1181,11 @@ int ustat(W *w, int k)
 
 int ucrawlr(W *w, int k)
 {
+	ptrdiff_t amnt;
 	BW *bw;
 	WIND_BW(bw, w);
-	ptrdiff_t amnt = bw->w / 2;
+
+	amnt = bw->w / 2;
 
 	pcol(bw->cursor, bw->cursor->xcol + amnt);
 	bw->cursor->xcol += amnt;
@@ -1181,10 +1196,12 @@ int ucrawlr(W *w, int k)
 
 int ucrawll(W *w, int k)
 {
+	ptrdiff_t amnt, curamnt;
 	BW *bw;
 	WIND_BW(bw, w);
-	off_t amnt = bw->w / 2;
-	off_t curamnt = bw->w / 2;
+
+	amnt = bw->w / 2;
+	curamnt = bw->w / 2;
 
 	if (amnt > bw->offset) {
 		amnt = bw->offset;

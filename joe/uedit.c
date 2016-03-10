@@ -1383,8 +1383,13 @@ int uupslide(W *w, int k)
 		scrup(bw, 1, 0);
 		return 0;
 	} else
+#ifdef JOEWIN
+		/* I don't like the scroll-wheel behavior.  I could add a command *just* for the mouse events, but I'm lazy. */
+		return -1;
+#else
 		/* was return -1; */
 		return uuparw(w, 0);
+#endif
 }
 
 int udnslide(W *w, int k)
@@ -1397,8 +1402,13 @@ int udnslide(W *w, int k)
 		scrdn(bw, 1, 0);
 		return 0;
 	} else
+#ifdef JOEWIN
+		/* I don't like the scroll-wheel behavior.  I could add a command *just* for the mouse events, but I'm lazy. */
+		return -1;
+#else
 		/* was return -1; */
 		return udnarw(w, 0);
+#endif
 }
 
 /* Move cursor to specified line number */
@@ -1786,14 +1796,14 @@ static int utypebw_raw(BW *bw, int k, int no_decode)
 	   	if (locale_map->type) {
 	   		char buf[8];
 	   		ptrdiff_t len = utf8_encode(buf, k);
-	   		joe_write(bw->b->out, buf, len);
+	   		writempx(bw->b->out, buf, len);
 	   	} else {
 	   		if (!no_decode) {
 		   		k = from_uni(locale_map, k);
 			}
 	   		if (k != -1) {
 	   			char c = TO_CHAR_OK(k);
-	   			joe_write(bw->b->out, &c, 1);
+	   			writempx(bw->b->out, &c, 1);
 	   		}
 		}
 		return 0;

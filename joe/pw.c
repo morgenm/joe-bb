@@ -326,7 +326,7 @@ char **regsub(char **z, ptrdiff_t len, char *s)
 	int x;
 
 	for (x = 0; x != len; ++x)
-		if (rmatch(s, z[x]))
+		if (rmatch(s, z[x], 0))
 			lst = vaadd(lst, vsncpy(NULL, 0, sz(z[x])));
 	return lst;
 }

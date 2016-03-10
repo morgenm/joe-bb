@@ -15,3 +15,6 @@ int procrc(CAP *cap, char *name);
 
 /* Validate rc file: return -1 if it's bad (call this after rc file has been loaded) */
 int validate_rc();
+
+#define HEX_RESTORE_UTF8	2
+#define HEX_RESTORE_CRLF	4

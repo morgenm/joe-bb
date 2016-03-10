@@ -14,6 +14,22 @@ struct mpx {
 	void	*object;	/* First arg to pass to function */
 	void	(*die)(void *object);	/* Function: call when client dies or closes */
 	void	*dieobj;
+
+#ifdef JOEWIN
+	int	dataqd;		/* Queue descriptor for stdout/stderr */
+	int	ptyfd;		/* File descriptor for process stdin */
+	HANDLE	hProcess;	/* Subprocess handle */
+	HANDLE	hReadThread;	/* Read thread handle */
+	HANDLE	hReadPipe;	/* Handle for stdout pipe */
+	B	*linebuf;	/* Buffer for current line of input */
+	int	droplf;		/* Track what to do with LFs */
+
+	/* VT specific */
+	int	vt;
+	int	raw;		/* Whether to buffer keystrokes */
+	int	szqd;		/* Queue descriptor for window size messages */
+	HANDLE	hSizeQThread;	/* Thread serving window size messages */
+#endif
 };
 
 /* void ttopen(void);  Open the tty (attached to stdin) for use inside of JOE
@@ -186,7 +202,11 @@ void signrm(void);
  *   Function to call when process dies in 'die'
  *   The first arg passed to func and die is object and dieobj
  */
-MPX *mpxmk(int *ptyfd, const char *cmd, char **args, void (*func)(void *object, char *data, ptrdiff_t len), void *object, void (*die) (void *object), void *dieobj, int out_only, ptrdiff_t w, ptrdiff_t h);
+MPX *mpxmk(int *ptyfd, const char *cmd, char **args, void (*func)(void *object, char *data, ptrdiff_t len), void *object, void (*die) (void *object), void *dieobj, int out_only, int vt, ptrdiff_t w, ptrdiff_t h);
+
+void killmpx(int pid, int sig);
+
+int writempx(int fd, void *data, size_t amt);
 
 extern int noxon;			/* Set if ^S/^Q processing should be disabled */
 extern int Baud;			/* Baud rate from joerc, cmd line or environment */
