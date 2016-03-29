@@ -29,27 +29,36 @@ void set_current_dir(BW *bw, char *s,int simp)
 	
 	if (s[0]=='!' || (s[0]=='>' && s[1]=='>'))
 		return;
-	vsrm(b->current_dir);
+	obj_free(b->current_dir);
 	if (s) {
 		b->current_dir=dirprt(s);
 		if (simp) {
-			char *tmp = simplify_prefix(b->current_dir);
-			vsrm(b->current_dir);
-			b->current_dir = tmp;
+			b->current_dir = simplify_prefix(b->current_dir);
 		}
 	}
 	else
 		b->current_dir = 0;
+	obj_perm(b->current_dir);
 }
 
 static void disppw(W *w, int flg)
 {
 	BW *bw = (BW *)w->object;
+	char *bf;
+	int i;
 	PW *pw = (PW *) bw->object;
 
 	if (!flg) {
 		return;
 	}
+
+	/* Try a nice graphics separator */
+	bf = joe_malloc(w->w + 1);
+	for (i = 0; i != w->w; ++i)
+		bf[i] = '-';
+	bf[i] = 0;
+	genfmt(w->t->t, w->x, w->y, 0, bf, bg_stalin, 0);
+	joe_free(bf);
 
 	/* Scroll buffer and position prompt */
 	if (pw->promptlen > w->w - 5) {
@@ -74,15 +83,25 @@ static void disppw(W *w, int flg)
 
 	/* Set cursor position */
 	w->curx = TO_DIFF_OK(piscol(bw->cursor) - bw->offset + pw->promptlen - pw->promptofst);
-	w->cury = 0;
+	w->cury = bw->cursor->line - bw->top->line + 1;
+	/* w->cury = w->h - 1; */
 
 	/* Generate prompt */
-	w->t->t->updtab[w->y] = 1;
-	genfmt(w->t->t, w->x, w->y, pw->promptofst, pw->prompt, BG_COLOR(bg_prompt), 0);
+	w->t->t->updtab[w->y + w->cury] = 1;
+	if (w->cury != pw->oldcury) {
+		int n;
+		for (n = 0; n != w->h; ++n)
+			w->t->t->updtab[w->y + n] = 1;
+		pw->oldcury = w->cury;
+	}
+	/* w->t->t->updtab[w->y + w->h - 1] = 1;
+	genfmt(w->t->t, w->x, w->y + w->h - 1, pw->promptofst, pw->prompt, BG_COLOR(bg_prompt), 0); */
 
 	/* Position and size buffer */
-	bwmove(bw, w->x + pw->promptlen - pw->promptofst, w->y);
-	bwresz(bw, w->w - (pw->promptlen - pw->promptofst), 1);
+	/* bwmove(bw, w->x + pw->promptlen - pw->promptofst, w->y);
+	bwresz(bw, w->w - (pw->promptlen - pw->promptofst), w->h); */
+	bwmove(bw, w->x, w->y + 1);
+	bwresz(bw, w->w, w->h - 1);
 
 	/* Generate buffer */
 	bwgen(bw, 0);
@@ -135,8 +154,7 @@ static int rtnpw(W *w)
 	PW *pw = (PW *)bw->object;
 	char *s;
 	W *win;
-	int *notify;
-	int (*pfunc)(W *w, char *s, void *object, int *notify);
+	int (*pfunc)(W *w, char *s, void *object);
 	void *object;
 	off_t byte;
 
@@ -144,7 +162,7 @@ static int rtnpw(W *w)
 	p_goto_eol(bw->cursor);
 	byte = bw->cursor->byte;
 	p_goto_bol(bw->cursor);
-	s = brvs(bw->cursor, byte - bw->cursor->byte);
+	s = brvs(NULL, bw->cursor, byte - bw->cursor->byte);
 
 	if (pw->file_prompt) {
 		s = canonical(s);
@@ -171,14 +189,12 @@ static int rtnpw(W *w)
 	joe_free(pw->prompt);
 	joe_free(pw);
 	w->object = NULL;
-	notify = w->notify;
-	w->notify = 0;
 	wabort(w);
 	dostaupd = 1;
 
 	/* Call callback function */
 	if (pfunc) {
-		return pfunc(win, s, object, notify);
+		return pfunc(win, s, object);
 	} else {
 		return -1;
 	}
@@ -248,26 +264,25 @@ WATOM watompw = {
 
 /* Create a prompt window */
 
-BW *wmkpw(W *w, const char *prompt, B **history, int (*func) (W *w, char *s, void *object, int *notify), const char *huh,
+BW *wmkpw(W *w, const char *prompt, B **history, int (*func) (W *w, char *s, void *object), const char *huh,
           int (*abrt)(W *w, void *object),
-          int (*tab)(BW *bw, int k), void *object, int *notify,struct charmap *map,int file_prompt)
+          int (*tab)(BW *bw, int k), void *object, struct charmap *map, int file_prompt)
 {
 	W *neww;
 	PW *pw;
 	BW *bw;
 
-	neww = wcreate(w->t, &watompw, w, w, w->main, 1, huh, notify);
+	neww = wcreate(w->t, &watompw, w, w, w->main, 2, huh);
 	if (!neww) {
-		if (notify) {
-			*notify = 1;
-		}
 		return NULL;
 	}
+	neww->fixed = 0;
 	wfit(neww->t);
-	neww->object = (void *) (bw = bwmk(neww, bmk(NULL), 1));
+	neww->object = (void *) (bw = bwmk(neww, bmk(NULL), 0, prompt));
 	bw->b->o.charmap = map;
 	bw->object = (void *) (pw = (PW *) joe_malloc(SIZEOF(PW)));
 	pw->abrt = abrt;
+	pw->oldcury = -1;
 	pw->tab = tab;
 	pw->object = object;
 	pw->prompt = zdup(prompt);
@@ -287,8 +302,8 @@ BW *wmkpw(W *w, const char *prompt, B **history, int (*func) (W *w, char *s, voi
 		binsb(bw->cursor, bcpy(pw->hist->bof, pw->hist->eof));
 		bw->b->changed = 0;
 		p_goto_eof(bw->cursor);
-		p_goto_eof(bw->top);
-		p_goto_bol(bw->top);
+		/* p_goto_eof(bw->top);
+		p_goto_bol(bw->top); */
 	} else {
 		pw->hist = NULL;
 	}
@@ -334,7 +349,7 @@ int cmplt_abrt(W *w, ptrdiff_t x, void *object)
 	char *line = (char *)object;
 	if (line) {
 		/* cmplt_ins(bw, line); */
-		vsrm(line);
+		obj_free(line);
 	}
 	return -1;
 }
@@ -343,7 +358,7 @@ int cmplt_rtn(MENU *m, ptrdiff_t x, void *object, int k)
 {
 	char *line = (char *)object;
 	cmplt_ins((BW *)m->parent->win->object, m->list[x]);
-	vsrm(line);
+	obj_free(line);
 	m->object = NULL;
 	wabort(m->parent);
 	return 0;
@@ -361,18 +376,16 @@ int simple_cmplt(BW *bw,char **list)
 	p_goto_bol(p);
 	q = pdup(bw->cursor, "simple_cmplt");
 	p_goto_eol(q);
-	line = brvs(p, q->byte - p->byte);	/* FIXME: Assumes short lines :-) */
+	line = brvs(NULL, p, q->byte - p->byte);	/* FIXME: Assumes short lines :-) */
 	prm(p);
 	prm(q);
 
 	line1 = vsncpy(NULL, 0, sv(line));
 	line1 = vsadd(line1, '*');
-	lst = regsub(list, aLEN(list), line1);
-	vsrm(line1);
+	lst = regsub(av(list), line1);
 
 	if (!lst) {
 		ttputc(7);
-		vsrm(line);
 		return -1;
 	}
 
@@ -386,13 +399,13 @@ int simple_cmplt(BW *bw,char **list)
 		}
 	}
 
-	m = mkmenu((menu_above ? bw->parent->link.prev : bw->parent), bw->parent, lst, cmplt_rtn, cmplt_abrt, NULL, 0, line, NULL);
+	obj_perm(line);
+	vaperm(lst);
+	m = mkmenu((menu_above ? bw->parent->link.prev : bw->parent), bw->parent, lst, cmplt_rtn, cmplt_abrt, NULL, 0, line);
 	if (!m) {
-		varm(lst);
-		vsrm(line);
 		return -1;
 	}
-	if (aLEN(lst) == 1)
+	if (valen(lst) == 1)
 		return cmplt_rtn(m, 0, line, 0);
 	else if (smode || isreg(line)) {
 		if (!menu_jump)
@@ -401,13 +414,82 @@ int simple_cmplt(BW *bw,char **list)
 	} else {
 		char *com = mcomplete(m);
 
-		vsrm((char *)m->object);
+		obj_free(m->object);
 		m->object = com;
+		obj_perm(com);
 		
 		cmplt_ins(bw, com);
 		wabort(m->parent);
 		smode = 2;
 		ttputc(7);
+		return 0;
+	}
+}
+
+/* Simplified prompting... convert original event-driven style to
+ * coroutine model */
+
+struct prompt_result {
+	Coroutine t;
+	char *answer;
+};
+
+int prompt_cont(W *w, char *s, void *object)
+{
+	struct prompt_result *r = (struct prompt_result *)object;
+	r->answer = s;
+
+	/* move answer to original coroutine's obj_stack */
+	obj_perm(r->answer);
+
+	co_resume(&r->t, 0);
+
+	return 0;
+}
+
+int prompt_abrt(W *w, void *object)
+{
+	struct prompt_result *r = (struct prompt_result *)object;
+	r->answer = 0;
+	co_resume(&r->t, -1);
+	return -1;
+}
+
+char *ask(W *w,			/* Prompt goes below this window */
+          const char *prompt,		/* Prompt text */
+          B **history,			/* History buffer to use */
+          char *huh,			/* Name of help screen for this prompt */
+          int (*tab)(),		/* Called when tab key is pressed */
+          struct charmap *map,		/* Character map for prompt */
+          int file_prompt,		/* Set for file-name tilde expansion */
+          int retrieve_last,		/* Set for cursor to go on last line of history */
+          char *preload)		/* Text to preload into prompt */
+{
+	struct prompt_result t;
+	BW *bw = wmkpw(w, prompt, history, prompt_cont, huh, prompt_abrt, tab, 
+	               &t, map, file_prompt);
+	if (!bw)
+		return 0;
+
+	bw->parent->coro = &t.t;
+	if (preload) {
+		/* Load hint, put cursor after it */
+		binss(bw->cursor, preload);
+		pset(bw->cursor, bw->b->eof);
+		bw->cursor->xcol = piscol(bw->cursor);
+	} else if (retrieve_last) {
+		/* One step back through history */
+		uuparw(w, NO_MORE_DATA);
+		u_goto_eol(w, NO_MORE_DATA);
+		bw->cursor->xcol = piscol(bw->cursor);
+	}
+
+	/* We get woken up when user hits return */
+	if (!co_yield(&t.t, 0)) {
+		/* Moving answer to original coroutine's stack */
+		obj_temp(t.answer);
+		return t.answer;
+	} else {
 		return 0;
 	}
 }

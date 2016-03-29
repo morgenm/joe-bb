@@ -45,7 +45,7 @@ static void fake_key(int c)
 	if(x)
 		maint->curwin->main->kbd->seq[x-1]=maint->curwin->kbd->seq[x-1];
 	if(m)
-		exemac(m, c);
+		co_call(exemac, m, c);
 }
 
 /* Translate mouse coordinates */
@@ -183,7 +183,7 @@ ptrdiff_t base64_pad = 0;
 
 static void ttputs64(char *pp, ptrdiff_t length)
 {
-	unsigned char *p = (unsigned char *)pp;
+	char *p = pp;
         char buf[65];
         ptrdiff_t x = 0;
         while (length--) {

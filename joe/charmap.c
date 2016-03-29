@@ -1257,8 +1257,8 @@ static void load_builtins(void)
 
 static struct builtin_charmap *parse_charmap(const char *name,FILE *f)
 {
-	char buf[1024];
-	char bf1[1024];
+	char *buf = 0;
+	char *bf1 = 0;
 	int comment_char = '#';
 	int in_map = 0;
 	int x;
@@ -1276,17 +1276,17 @@ static struct builtin_charmap *parse_charmap(const char *name,FILE *f)
 		b->to_uni[x]= -1;
 
 	/* This is a _really_bad_ parser.  The file has to be perfect. */
-	while (fgets(buf,sizeof(buf),f)) {
+	while (vsgets(&buf,f)) {
 		const char *p = buf;
 		parse_ws(&p, comment_char);
-		parse_tows(&p, bf1);
+		parse_tows(&p, &bf1);
 		if (!zcmp(bf1,"<comment_char>")) {
 			parse_ws(&p, comment_char);
-			parse_tows(&p, bf1);
+			parse_tows(&p, &bf1);
 			comment_char = ((unsigned char *)bf1)[0];
 		} else if (!zcmp(bf1,"<escape_char>")) {
 			parse_ws(&p, comment_char);
-			parse_tows(&p, bf1);
+			parse_tows(&p, &bf1);
 		} else if (!zcmp(bf1,"CHARMAP")) {
 			in_map = 1;
 		} else if (!zcmp(bf1,"END")) {
@@ -1296,7 +1296,7 @@ static struct builtin_charmap *parse_charmap(const char *name,FILE *f)
 			int byt;
 			uni = ztoi(bf1 + 2);
 			parse_ws(&p, comment_char);
-			parse_tows(&p, bf1);
+			parse_tows(&p, &bf1);
 			byt = ztoi(bf1 + 2);
 			b->to_uni[byt]=uni;
 		}
@@ -1353,7 +1353,7 @@ static int map_name_cmp(const char *a,const char *b)
 
 struct charmap *find_charmap(const char *name)
 {
-	char buf[1024];
+	char *buf = 0;
 	char *p;
 	struct charmap *m;
 	struct builtin_charmap *b;
@@ -1383,13 +1383,13 @@ struct charmap *find_charmap(const char *name)
 	p = getenv("HOME");
 	f = 0;
 	if (p) {
-		joe_snprintf_2(buf,SIZEOF(buf),"%s/.joe/charmaps/%s",p,name);
+		buf = vsfmt(buf, 0, "%s/.joe/charmaps/%s",p,name);
 		f = fopen(buf,"r");
 	}
 
 	/* Check JOERCcharmaps */
 	if (!f) {
-		joe_snprintf_2(buf,SIZEOF(buf),"%scharmaps/%s",JOEDATA,name);
+		buf = vsfmt(buf, 0, "%scharmaps/%s",JOEDATA,name);
 		f = fopen(buf,"r");
 	}
 
@@ -1431,7 +1431,7 @@ char **get_encodings()
 	char *r;
 	char *oldpwd = pwd();
 	char *p;
-	char buf[1024];
+	char *buf = 0;
 
 	/* Builtin maps */
 
@@ -1441,6 +1441,7 @@ char **get_encodings()
 	encodings = vaadd(encodings, r);
 	r = vsncpy(NULL,0,sc("utf-16r"));
 	encodings = vaadd(encodings, r);
+	vaperm(encodings);
 
 	for (y=0; y!=SIZEOF(builtin_charmaps)/SIZEOF(struct builtin_charmap); ++y) {
 		r = vsncpy(NULL,0,sz(builtin_charmaps[y].name));
@@ -1458,34 +1459,32 @@ char **get_encodings()
 
 	p = getenv("HOME");
 	if (p) {
-		joe_snprintf_1(buf,SIZEOF(buf),"%s/.joe/charmaps",p);
+		buf = vsfmt(buf, 0, "%s/.joe/charmaps",p);
 		if (!chpwd(buf) && (t = rexpnd("*"))) {
-			for (x = 0; x != aLEN(t); ++x)
+			for (x = 0; x != valen(t); ++x)
 				if (zcmp(t[x],"..")) {
-					for (y = 0; y != aLEN(encodings); ++y)
+					for (y = 0; y != valen(encodings); ++y)
 						if (!zcmp(t[x],encodings[y]))
 							break;
-					if (y == aLEN(encodings)) {
+					if (y == valen(encodings)) {
 						r = vsncpy(NULL,0,sv(t[x]));
 						encodings = vaadd(encodings,r);
 					}
 				}
-			varm(t);
 		}
 	}
 
 	if (!chpwd((JOEDATA "charmaps")) && (t = rexpnd("*"))) {
-		for (x = 0; x != aLEN(t); ++x)
+		for (x = 0; x != valen(t); ++x)
 			if (zcmp(t[x],"..")) {
-				for (y = 0; y != aLEN(encodings); ++y)
+				for (y = 0; y != valen(encodings); ++y)
 					if (!zcmp(t[x],encodings[y]))
 						break;
-				if (y == aLEN(encodings)) {
+				if (y == valen(encodings)) {
 					r = vsncpy(NULL,0,sv(t[x]));
 					encodings = vaadd(encodings,r);
 				}
 			}
-		varm(t);
 	}
 
 	chpwd(oldpwd);
@@ -1722,73 +1721,69 @@ void joe_locale()
 	init_gettext(locale_msgs);
 }
 
-void my_iconv(char *dest, ptrdiff_t destsiz, struct charmap *dest_map,
+char *my_iconv(char *dest, struct charmap *dest_map,
               const char *src, struct charmap *src_map)
 {
 	if (dest_map == src_map) {
-		zlcpy (dest, destsiz, src);
-		return;
+	        return vscpyz(dest, src);
 	}
 
 	if (src_map->type) {
 		/* src is UTF-8 */
 		if (dest_map->type) {
 			/* UTF-8 to UTF-8? */
-			zlcpy (dest, destsiz, src);
+			dest = vscpyz(dest, src);
 		} else {
-			--destsiz;
 			/* UTF-8 to non-UTF-8 */
-			while (*src && destsiz) {
+			dest = vsensure(dest, zlen(src) / 2);
+			dest = vstrunc(dest, 0);
+			while (*src) {
 				ptrdiff_t len = -1;
 				int c = utf8_decode_fwrd(&src, &len);
 				if (c >= 0) {
 					int d = from_uni(dest_map, c);
 					if (d >= 0)
-						*dest++ = TO_CHAR_OK(d);
+					        dest = vsadd(dest, TO_CHAR_OK(d));
 					else
-						*dest++ = '?';
+					        dest = vsadd(dest, '?');
 				} else
-					*dest++ = 'X';
-				--destsiz;
+				        dest = vsadd(dest, 'X');
 			}
-			*dest = 0;
 		}
 	} else {
 		/* src is not UTF-8 */
 		if (!dest_map->type) {
 			/* Non UTF-8 to non-UTF-8 */
-			--destsiz;
-			while (*src && destsiz) {
+			dest = vsensure(dest, zlen(src));
+			dest = vstrunc(dest, 0);
+			while (*src) {
 				int c = to_uni(src_map, *src++);
 				int d;
 				if (c >= 0) {
 					d = from_uni(dest_map, c);
 					if (d >= 0)
-						*dest++ = TO_CHAR_OK(d);
+						dest = vsadd(dest, TO_CHAR_OK(d));
 					else
-						*dest++ = '?';
+						dest = vsadd(dest, '?');
 				} else
-					*dest++ = '?';
-				--destsiz;
+					dest = vsadd(dest, '?');
 			}
-			*dest = 0;
 		} else {
 			/* Non-UTF-8 to UTF-8 */
-			--destsiz;
-			while (*src && destsiz >= 6) {
+			dest = vsensure(dest, zlen(src) * 3);
+			dest = vstrunc(dest, 0);
+			while (*src) {
 				int c = to_uni(src_map, *src++);
 				if (c >= 0) {
-					ptrdiff_t l = utf8_encode(dest, c);
-					destsiz -= l;
-					dest += l;
-				} else {
-					*dest++ = '?';
-					--destsiz;
-				}
+					dest = vsensure(dest, vslen(dest) + 10);
+					obj_len(dest) += utf8_encode(dest + obj_len(dest), c);
+					dest[obj_len(dest)] = 0;
+				} else
+					dest = vsadd(dest, '?');
 			}
-			*dest = 0;
 		}
 	}
+	return dest;
 }
 
 /* Guess character set */

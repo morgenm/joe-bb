@@ -5,6 +5,8 @@
  *
  *	This file is part of JOE (Joe's Own Editor)
  */
+#ifndef _JOE_MACRO_H
+#define _JOE_MACRO_H 1
 
 /* A macro or macro step */
 
@@ -73,19 +75,7 @@ char *mtext(char *s, MACRO *m);
 
 /* Execute a macro */
 extern MACRO *curmacro; /* Current macro being executed */
-extern int current_arg; /* Current macro repeat argument */
-extern int current_arg_set; /* Set if repeat arg was given */
-
-/* Execute a macro: for user typing.
-     Records step if we are recording.
-   K overrides the key for the macro if it is not -1.
-*/
-int exemac(MACRO *m, int k);
-
-/* Execute a macro as a subroutine
-    u set to treat as single undo step
-    k overrides the key for the macro if it is not -1.
-*/
+int exemac(va_list args);
 int exmacro(MACRO *m, int u, int k);
 
 /* Keyboard macros user interface */
@@ -108,7 +98,11 @@ int uendif(W *w, int k);	/* End of conditional */
 void load_macros(FILE *f);	/* Load keyboard macros from .joe_state file */
 void save_macros(FILE *f);	/* Save keyboard macros in .joe_state file */
 
+extern int current_arg; /* Current macro repeat argument */
+extern int current_arg_set; /* Set if repeat arg was given */
+
 /* Append escaped version of character c to string ptr
    Used by mtext.
 */
 char *unescape(char *ptr,int c);
+#endif
