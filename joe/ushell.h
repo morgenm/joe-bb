@@ -11,7 +11,7 @@ int ukillpid(W *w, int k);
 int urun(W *w, int k);
 int ubuild(W *w, int k);
 int ugrep(W *w, int k);
-int cstart(BW *bw, const char *name, char **s, void *obj, int *notify, int build, int out_only, const char *first_command, int vt);
+int cstart(BW *bw, const char *name, char **s, void *obj, int build, int out_only, const char *first_command, int vt);
 
 extern B *runhist; /* Shell command history */
 extern B *buildhist; /* Build command history */
