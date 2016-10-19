@@ -6,7 +6,7 @@ struct jfile {
 };
 
 JFILE *jfopen(const char *name, const char *mode);
-char *jfgets(char *buf,int len,JFILE *f);
+char *jfgets(char **buf,JFILE *f);
 int jfclose(JFILE *f);
 char **jgetbuiltins(const char *suffix);
 

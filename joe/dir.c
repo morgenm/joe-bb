@@ -44,6 +44,6 @@ int mkdir(char *s)
 	tickoff();
 	rtval = system(y);
 	tickon();
-	vsrm(y);
+	obj_free(y);
 	return rtval;
 }

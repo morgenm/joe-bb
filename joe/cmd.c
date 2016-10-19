@@ -100,7 +100,7 @@ CMD cmds[] = {
 	{"gomark", TYPETW + TYPEPW + EMOVE, ugomark, NULL, 0, NULL},
 	{"gparse", TYPETW, ugparse, NULL, 0, NULL},
 	{"grep", TYPETW, ugrep, NULL, 0, NULL},
-	{"groww", TYPETW, ugroww, NULL, 1, "shrinkw"},
+	{"groww", TYPETW+TYPEPW, ugroww, NULL, 1, "shrinkw"},
 	{"if", TYPETW+TYPEPW+TYPEMENU+TYPEQW+EMETA, uif, 0, 0, 0 },
 	{"isrch", TYPETW + TYPEPW, uisrch, NULL, 0, NULL},
 	{"jump", TYPETW, ujump, NULL, 0, NULL },
@@ -234,62 +234,6 @@ const char *steallock_key= _("|steal the lock|sS");
 const char *canceledit_key= _("|cancel edit due to lock|qQ");
 const char *ignorelock_key=  _("|ignore lock, continue with edit|iI");
 
-static int steal_lock(W *w,int c,void *object,int *notify)
-{
-	B *b = (B *)object;
-	if (yncheck(steallock_key, c)) {
-		char bf1[256];
-		char bf[300];
-		unlock_it(b->name);
-		if (lock_it(b->name,bf1)) {
-			int x;
-			for(x=0;bf1[x] && bf1[x]!=':';++x);
-			bf1[x]=0;
-			if(bf1[0])
-				joe_snprintf_1(bf,SIZEOF(bf),joe_gettext(LOCKMSG1),bf1);
-			else
-				joe_snprintf_0(bf, SIZEOF(bf), joe_gettext(LOCKMSG2));
-			if (mkqw(w, sz(bf), steal_lock, NULL, b, notify)) {
-				return 0;
-			} else {
-				if (notify)
-					*notify = -1;
-				return -1;
-			}
-		} else {
-			b->locked=1;
-			if (notify)
-				*notify = 1;
-			return 0;
-		}
-	} else if (yncheck(ignorelock_key, c)) {
-		b->locked=1;
-		b->ignored_lock=1;
-		if (notify)
-			*notify = 1;
-		return 0;
-	} else if (yncheck(canceledit_key, c)) {
-		if (notify)
-			*notify = 1;
-		return 0;
-	} else {
-		if (mkqw(w, sz(joe_gettext(LOCKMSG2)), steal_lock, NULL, b, notify)) {
-			return 0;
-		} else
-			return -1;
-	}
-}
-
-static int file_changed(W *w,int c,void *object,int *notify)
-{
-	B *b = (B *)object;
-	if (mkqw(w, sz(joe_gettext(_("Notice: File on disk changed! (hit %{abort} to continue)  "))), file_changed, NULL, b, notify)) {
-		b->gave_notice = 1;
-		return 0;
-	} else
-		return -1;
-}
-
 /* Try to lock: start dialog if we can't.  Returns 0 if we couldn't lock */
 
 int try_lock(BW *bw,B *b)
@@ -301,23 +245,29 @@ int try_lock(BW *bw,B *b)
 		char bf[300];
 		int x;
 		/* It's a plain file- try to lock it */
-		if (lock_it(b->name,bf1)) {
+		while (lock_it(b->name,bf1)) {
+			int c;
 			for(x=0;bf1[x] && bf1[x]!=':';++x);
 			bf1[x]=0;
 			if(bf1[0])
 				joe_snprintf_1(bf,SIZEOF(bf),joe_gettext(LOCKMSG1),bf1);
 			else
 				joe_snprintf_0(bf, SIZEOF(bf), joe_gettext(LOCKMSG2));
-			if (mkqw(bw->parent, sz(bf), steal_lock, NULL, b, NULL)) {
-				uquery(bw->parent, 0);
-				if (!b->locked)
-					return 0;
-			} else
+			c = query(bw->parent, sz(bf), QW_NOMACRO); /* This should not take input from macro */
+			if (c == -1)
 				return 0;
-		} else {
-			/* Remember to unlock it */
-			b->locked = 1;
+			else if (yncheck(steallock_key, c)) {
+				unlock_it(b->name);
+			} else if (yncheck(ignorelock_key, c)) {
+				b->locked = 1;
+				b->ignored_lock = 1;
+				return 1;
+			} else if (yncheck(canceledit_key, c)) {
+				return 0;
+			}
 		}
+		/* Remember to unlock it */
+		b->locked = 1;
 	}
 	return 1;
 }
@@ -333,7 +283,9 @@ int modify_logic(BW *bw,B *b)
 	if (last_time > b->check_time + CHECK_INTERVAL) {
 		b->check_time = last_time;
 		if (!nomodcheck && !b->gave_notice && check_mod(b)) {
-			file_changed(bw->parent,0,b,NULL);
+			int c = query(bw->parent, sz(joe_gettext(_("Notice: File on disk changed! (hit %{abort} to continue)  "))), QW_NOMACRO); /* Should not take macro input */
+			if (c != -1)
+				b->gave_notice = 1;
 			return 0;
 		}
 	}
@@ -380,6 +332,26 @@ int modify_logic(BW *bw,B *b)
 
 /* Execute a command n with key k */
 
+typedef int(cmd_func_t)(void *obj, int);
+
+int call_cmd(va_list args)
+{
+	char *gc;
+	int rtn;
+	cmd_func_t *func;
+	void *obj;
+	int k;
+	func = va_arg(args, cmd_func_t *);
+	obj = va_arg(args, void *);
+	k = va_arg(args, int);
+
+	gc = vsmk(1);
+	rtn = func(obj, k);
+	obj_free(gc);
+
+	return rtn;
+}
+
 int execmd(CMD *cmd, int k)
 {
 	BW *bw = (BW *) maint->curwin->object;
@@ -398,8 +370,10 @@ int execmd(CMD *cmd, int k)
 	}
 #endif
 
-	if (cmd->m)
-		return exmacro(cmd->m, 0, NO_MORE_DATA);
+	if (cmd->m) {
+		ret = exmacro(cmd->m, 0, NO_MORE_DATA);
+		return ret;
+	}
 
 	/* We don't execute if we have to fix the column position first
 	 * (i.e., left arrow when cursor is in middle of nowhere) */
@@ -425,14 +399,15 @@ int execmd(CMD *cmd, int k)
 	}
 
 	/* Execute command */
-	ret = cmd->func(maint->curwin, k);
+	ret = co_call(call_cmd, cmd->func, maint->curwin, k);
 
 	if (smode)
 		--smode;
 
 	/* Don't update anything if we're going to leave */
-	if (leave)
+	if (leave) {
 		return 0;
+	}
 
 	/* cmd->func could have changed bw on us */
 	/* This is bad: maint->curwin might not be the same window */
@@ -540,7 +515,7 @@ static char **getcmds(void)
 	for (x = 0; x != cmdhash->len; ++x)
 		for (e = cmdhash->tab[x]; e; e = e->next)
 			s = vaadd(s, vsncpy(NULL, 0, sz(e->name)));
-	vasort(s, aLen(s));
+	vasort(av(s));
 	return s;
 }
 
@@ -550,50 +525,34 @@ char **scmds = NULL;	/* Array of command names */
 
 static int cmdcmplt(BW *bw, int k)
 {
-	if (!scmds)
+	if (!scmds) {
 		scmds = getcmds();
+		vaperm(scmds);
+	}
 	return simple_cmplt(bw,scmds);
-}
-
-static int docmd(W *w, char *s, void *object, int *notify)
-{
-	MACRO *mac;
-	int ret = -1;
-	ptrdiff_t sta = -1;
-	
-
-	mac = mparse(NULL, s, &sta,0);
-	if (sta < 0) {
-		msgnw(w,joe_gettext(_("No such command")));
-	} else {
-		ret = exmacro(mac, 1, NO_MORE_DATA);
-		rmmacro(mac);
-	}
-
-#ifdef junk
-	CMD *cmd = findcmd(s);
-	vsrm(s);	/* allocated in pw.c::rtnpw() */
-	if (!cmd)
-		msgnw(bw->parent,joe_gettext(_("No such command")));
-	else {
-		mac = mkmacro(-1, 0, 0, cmd);
-		ret = exmacro(mac, 1, NO_MORE_DATA);
-		rmmacro(mac);
-	}
-#endif
-
-	if (notify)
-		*notify = 1;
-	return ret;
 }
 
 B *cmdhist = NULL;
 
 int uexecmd(W *w, int k)
 {
-	if (wmkpw(w, joe_gettext(_("Command: ")), &cmdhist, docmd, "cmd", NULL, cmdcmplt, NULL, NULL, utf8_map, 0)) {
-		return 0;
-	} else {
-		return -1;
+	BW *bw;
+	MACRO *mac;
+	WIND_BW(bw, w);
+	
+	ptrdiff_t ret = -1;
+	char *s = ask(w, joe_gettext(_("Command: ")),
+		&cmdhist, _("cmd"), cmdcmplt, utf8_map, 0, 0, NULL);
+	
+	if (s) {
+		mac = mparse(NULL, s, &ret, 0);
+		if (ret < 0 || !mac) {
+			msgnw(bw->parent, joe_gettext(_("No such command")));
+		} else {
+			ret = exmacro(mac, 1, NO_MORE_DATA);
+			rmmacro(mac);
+		}
 	}
+
+	return ret;
 }
