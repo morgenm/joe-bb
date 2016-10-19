@@ -129,8 +129,7 @@ static void psetattr(P *p, int attr, int cur, int adv)
 	if ((cur & FG_MASK) != (attr & FG_MASK)) {
 		int color = ((attr & FG_VALUE) >> FG_SHIFT);
 		if (color >= 0 && color <= 7) {
-			char bf[10];
-			joe_snprintf_1(bf, SIZEOF(bf), "\033[%dm", color + 30);
+			char *bf = vsfmt(NULL, 0, "\033[%dm", color + 30);
 			binss(p, bf);
 			pfwrd(p, zlen(bf));
 		}
@@ -138,8 +137,7 @@ static void psetattr(P *p, int attr, int cur, int adv)
 	if ((cur & BG_MASK) != (attr & BG_MASK)) {
 		int color = ((attr & BG_VALUE) >> BG_SHIFT);
 		if (color >= 0 && color <= 7) {
-			char bf[10];
-			joe_snprintf_1(bf, SIZEOF(bf), "\033[%dm", color + 40);
+			char *bf = vsfmt(NULL, 0, "\033[%dm", color + 40);
 			binss(p, bf);
 			pfwrd(p, zlen(bf));
 		}

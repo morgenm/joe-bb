@@ -9,6 +9,8 @@
 
 #ifdef TERMINFO
 
+/* Fixes for itanium */
+
 #ifdef __CYGWIN__
 #include <ncurses/curses.h>
 #include <ncurses/term.h>
@@ -17,6 +19,7 @@
 #ifdef HAVE_CURSES_H
 #include <curses.h>
 #endif
+
 /* curses has to come before term.h on SGI */
 #ifdef HAVE_TERM_H
 /* term.h is a disaster: it #defines 'tab' */
@@ -145,7 +148,7 @@ static off_t findidx(FILE *file, const char *name)
 
 /* Load termcap entry */
 
-CAP *my_getcap(char *name, long baud, void (*out) (void *, char), void *outptr)
+CAP *getcap(char *name, long baud, void (*out) (void *, char), void *outptr)
 {
 	CAP *cap;
 	FILE *f, *f1;
@@ -160,6 +163,7 @@ CAP *my_getcap(char *name, long baud, void (*out) (void *, char), void *outptr)
 		return NULL;
 	cap = (CAP *) joe_malloc(SIZEOF(CAP));
 	cap->tbuf = vsmk(4096);
+	obj_perm(cap->tbuf);
 	cap->abuf = NULL;
 	cap->sort = NULL;
 
@@ -201,7 +205,6 @@ CAP *my_getcap(char *name, long baud, void (*out) (void *, char), void *outptr)
 	}
 
 	npbuf = vawords(NULL, sv(namebuf), sc("\t :"));
-	vsrm(namebuf);
 
 	y = 0;
 	ti = 0;
@@ -228,7 +231,7 @@ CAP *my_getcap(char *name, long baud, void (*out) (void *, char), void *outptr)
 	}
 	idx = 0;
 	idxname = vsncpy(NULL, 0, sz(npbuf[y]));
-	idxname = vsncpy(idxname, sLEN(idxname), sc(".idx"));
+	idxname = vsncpy(idxname, vslen(idxname), sc(".idx"));
 	f1 = fopen((npbuf[y]), "r");
 	++y;
 	if (!f1)
@@ -245,15 +248,14 @@ CAP *my_getcap(char *name, long baud, void (*out) (void *, char), void *outptr)
 			logmessage_1(joe_gettext(_("termcap: %s is out of date\n")), idxname);
 		fclose(f);
 	}
-	vsrm(idxname);
 	fseek(f1, idx, 0); /* Should be fseeko, but old systems don't have it */
 	cap->tbuf = lfind(cap->tbuf, ti, f1, name);
 	fclose(f1);
-	if (sLEN(cap->tbuf) == ti)
+	if (vslen(cap->tbuf) == ti)
 		goto nextfile;
 
       checktc:
-	x = sLEN(cap->tbuf);
+	x = vslen(cap->tbuf);
 	do {
 		cap->tbuf[x] = 0;
 		while (x && cap->tbuf[--x] != ':')
@@ -265,7 +267,7 @@ CAP *my_getcap(char *name, long baud, void (*out) (void *, char), void *outptr)
 		cap->tbuf[x] = 0;
 		cap->tbuf[x + 1] = 0;
 		ti = x + 1;
-		sLen(cap->tbuf) = x + 1;
+		obj_len(cap->tbuf) = x + 1;
 		if (y)
 			--y;
 		goto nextfile;
@@ -347,9 +349,6 @@ CAP *my_getcap(char *name, long baud, void (*out) (void *, char), void *outptr)
 				break;
 		goto doline;
 	}
-
-	varm(npbuf);
-	vsrm(name);
 
 	cap->pad = jgetstr(cap, "pc");
 	if (dopadding)
@@ -439,7 +438,7 @@ int getnum(CAP *cap, const char *name)
 
 void rmcap(CAP *cap)
 {
-	vsrm(cap->tbuf);
+	obj_free(cap->tbuf);
 	if (cap->abuf)
 		joe_free(cap->abuf);
 	if (cap->sort)
@@ -735,7 +734,7 @@ char c;
 int tgetent(buf, name)
 char *buf, *name;
 {
-	latest = my_getcap(name, 9600, stupid, NULL);
+	latest = getcap(name, 9600, stupid, NULL);
 	if (latest)
 		return 1;
 	else
