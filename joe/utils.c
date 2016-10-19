@@ -211,8 +211,6 @@ void joe_free(void *ptr)
 
 #else
 
-/* Normal malloc() */
-
 void *joe_malloc(ptrdiff_t size)
 {
 	void *p = malloc((size_t)size);
@@ -507,45 +505,25 @@ int *Zlcpy(int *a, ptrdiff_t len, const int *b)
 
 /* Convert ints to chars */
 
-char *Ztoz(char *a, ptrdiff_t len, const int *b)
+char *Ztoz(char *dest, const int *src)
 {
-	char *org = a;
-	if (!len) {
-		fprintf(stderr, "Ztoz called with len == 0\n");
-		exit(1);
-	}
-	--len;
-	while (len && *b) {
-		*a++ = TO_CHAR_OK(*b++);
-		--len;
-	}
-	*a = 0;
-	return org;
+	while (*src)
+		dest = vsadd(dest, TO_CHAR_OK(*src++));
+	return dest;
 }
 
 /* Convert ints to utf8 */
 
-char *Ztoutf8(char *a, ptrdiff_t len, const int *b)
+char *Ztoutf8(char *dest, const int *src)
 {
-	char *org = a;
-	if (!len) {
-		fprintf(stderr, "Ztoz called with len == 0\n");
-		exit(1);
-	}
-	--len;
-	while (len && *b) {
+	while (*src) {
 		char bf[8];
-		ptrdiff_t enc = utf8_encode(bf, *b++);
-		ptrdiff_t x;
-		if (enc < len) {
-			for (x = 0; x != enc; ++x) {
-				*a++ = bf[x];
-				--len;
-			}
-		}
+		ptrdiff_t enc = utf8_encode(bf, *src++);
+		dest = vsensure(dest, vslen(dest) + enc);
+		dest = vscat(dest, bf, enc);
 	}
-	*a = 0;
-	return org;
+
+	return dest;
 }
 
 /* Length of an int string */
@@ -625,8 +603,6 @@ int parse_ws(const char **pp,int cmt)
 		while (*p)
 			++p;
 	}
-/* 	if (*p=='\r' || *p=='\n' || *p==cmt)
-		*p = 0; */
 	*pp = p;
 	return *p;
 }
@@ -667,28 +643,23 @@ int parse_wsl(const char **pp,int cmt)
 
 /* Parse an identifier into a buffer.  Identifier is truncated to a maximum of len-1 chars. */
 
-int parse_ident(const char * *pp, char *buf, ptrdiff_t len)
+int parse_ident(const char * *pp, char **buf)
 {
 	const char *p = *pp;
 	const char *q;
-	int c;
+	char *bf = *buf;
 	
+	bf = vstrunc(bf, 0);
 	q = p;
-	if (joe_isalpha_(utf8_map, (c = utf8_decode_fwrd(&q, NULL)))) {
+	
+	if (joe_isalpha_(utf8_map, utf8_decode_fwrd(&p, NULL))) {
 		do {
-			char bf[8];
-			ptrdiff_t enc = utf8_encode(bf, c);
-			ptrdiff_t x;
-			if (enc + 1 <= len) {
-				for (x = 0; x != enc; ++x) {
-					*buf++ = bf[x];
-					--len;
-				}
-				*buf = 0;
-			}
-			p = q;
-		} while (joe_isalnum_(utf8_map, (c = utf8_decode_fwrd(&q, NULL))));
-		*pp = p;
+			while (q < p)
+				bf = vsadd(bf, *q++);
+		} while (joe_isalnum_(utf8_map, utf8_decode_fwrd(&p, NULL)));
+		
+		*pp = q;
+		*buf = bf;
 		return 0;
 	} else
 		return -1;
@@ -696,14 +667,16 @@ int parse_ident(const char * *pp, char *buf, ptrdiff_t len)
 
 /* Parse to next whitespace */
 
-int parse_tows(const char * *pp, char *buf)
+int parse_tows(const char **pp, char **bf)
 {
 	const char *p = *pp;
+	char *buf = *bf;
+	buf = vstrunc(buf, 0);
 	while (*p && *p!=' ' && *p!='\t' && *p!='\n' && *p!='\r' && *p!='#')
-		*buf++ = *p++;
+		buf = vsadd(buf, *p++);
 
 	*pp = p;
-	*buf = 0;
+	*bf = buf;
 	return 0;
 }
 
@@ -819,49 +792,46 @@ int parse_off_t(const char * *pp, off_t *buf)
  * -1 if there is no string or if the input ended before the terminating ".
  */
 
-ptrdiff_t parse_string(const char **pp, char *buf, ptrdiff_t len)
+ptrdiff_t parse_string(const char **pp, char **dst)
 {
-	char *start = buf;
-	const char *p= *pp;
+	char *start = vstrunc(*dst, 0);
+	const char *p = *pp;
 	if(*p=='\"') {
 		++p;
-		while(len > 1 && *p && *p!='\"') {
-			int c = escape(0, &p, NULL, NULL);
-			*buf++ = TO_CHAR_OK(c);
-			--len;
-		}
-		*buf = 0;
 		while(*p && *p!='\"') {
-			escape(0, &p, NULL, NULL);
+			ptrdiff_t x = 50;
+			int c = escape(0, &p, &x, NULL);
+			start = vsadd(start, TO_CHAR_OK(c));
 		}
 		if(*p == '\"') {
 			*pp = p + 1;
-			return buf - start;
+			*dst = start;
+			return vslen(start);
 		}
 	}
+	*dst = 0;
 	return -1;
 }
 
-ptrdiff_t parse_Zstring(const char **pp, int *buf, ptrdiff_t len)
+ptrdiff_t parse_Zstring(const char **pp, int *dst, ptrdiff_t len)
 {
-	int *start = buf;
-	const char *p= *pp;
+	int *start = dst;
+	const char *p = *pp;
+	
 	if(*p=='\"') {
 		++p;
 		while(len > 1 && *p && *p!='\"') {
 			int c = escape(1, &p, NULL, NULL);
-			*buf++ = c;
+			*dst++ = c;
 			--len;
 		}
-		*buf = 0;
-		while(*p && *p!='\"') {
-			escape(1, &p, NULL, NULL);
-		}
+		*dst = 0;
 		if(*p == '\"') {
 			*pp = p + 1;
-			return buf - start;
+			return dst - start;
 		}
 	}
+	
 	return -1;
 }
 

@@ -502,13 +502,14 @@ void save_yank(FILE *f)
 void load_yank(FILE *f)
 {
 	UNDOREC *rec;
-	char buf[SMALL*4+80];
-	char bf[SMALL+1];
-	while(fgets(buf,SIZEOF(buf)-1,f) && zcmp(buf,"done\n")) {
+	char *buf = vsmk(1024);
+	char *bf = vsmk(1024);
+	
+	while(vsgets(&buf,f) && zcmp(buf,"done")) {
 		const char *p = buf;
 		ptrdiff_t len;
 		parse_ws(&p,'#');
-		len = parse_string(&p,bf,SIZEOF(bf));
+		len = parse_string(&p,&bf);
 		if (len>0 && len<=SMALL) {
 			if (++nyanked == MAX_YANK) {
 				frrec(deque_f(UNDOREC, link, yanked.link.next));

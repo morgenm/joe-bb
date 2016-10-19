@@ -125,44 +125,44 @@ static const int *get_context(BW *bw)
 static char *get_context(BW *bw)
 {
 	P *p = pdup(bw->cursor, "get_context");
-	static char buf1[stdsiz];
-	int i, j, spc;
+	char *buf = 0;
+	char *buf1;
+	int i, spc;
 
 
-	buf1[0] = 0;
+	buf1 = vsmk(128);
 	/* Find first line with 0 indentation which is not a comment line */
 	do {
 		p_goto_bol(p);
 		if (!pisindent(p) && !pisblank(p)) {
 			/* next: */
-			brzs(p,stdbuf,stdsiz/8); /* To avoid buffer overruns with my_iconv */
+			buf = brzs(buf, p);
 			/* Ignore comment and block structuring lines */
-			if (!(stdbuf[0]=='{' ||
-			    (stdbuf[0]=='/' && stdbuf[1]=='*') ||
-			    stdbuf[0]=='\f' ||
-			    (stdbuf[0]=='/' && stdbuf[1]=='/') ||
-			    stdbuf[0]=='#' ||
-			    (stdbuf[0]=='b' && stdbuf[1]=='e' && stdbuf[2]=='g' && stdbuf[3]=='i' && stdbuf[4]=='n') ||
-			    (stdbuf[0]=='B' && stdbuf[1]=='E' && stdbuf[2]=='G' && stdbuf[3]=='I' && stdbuf[4]=='N') ||
-			    (stdbuf[0]=='-' && stdbuf[1]=='-') ||
-			    stdbuf[0]==';')) {
-			    	/* zlcpy(buf1, SIZEOF(buf1), stdbuf); */
+			if (!(buf[0]=='{' ||
+			    (buf[0]=='/' && buf[1]=='*') ||
+			    buf[0]=='\f' ||
+			    (buf[0]=='/' && buf[1]=='/') ||
+			    buf[0]=='#' ||
+			    (buf[0]=='b' && buf[1]=='e' && buf[2]=='g' && buf[3]=='i' && buf[4]=='n') ||
+			    (buf[0]=='B' && buf[1]=='E' && buf[2]=='G' && buf[3]=='I' && buf[4]=='N') ||
+			    (buf[0]=='-' && buf[1]=='-') ||
+			    buf[0]==';')) {
  				/* replace tabs to spaces and remove adjoining spaces */
- 				for (i=0,j=0,spc=0; stdbuf[i]; i++) {
- 					if (stdbuf[i]=='\t' || stdbuf[i]==' ') {
+ 				buf1 = vstrunc(buf1, 0);
+ 				for (i=0,spc=0; buf[i]; i++) {
+ 					if (buf[i]=='\t' || buf[i]==' ') {
  						if (spc) continue;
  						spc = 1;
  					}
  					else spc = 0;
- 					if (stdbuf[i]=='\t')
- 						buf1[j++] = ' ';
-					else if (stdbuf[i]=='\\') {
-						buf1[j++] = '\\';
-						buf1[j++] = '\\';
+ 					if (buf[i]=='\t')
+ 						buf1 = vsadd(buf1, ' ');
+					else if (buf[i]=='\\') {
+						buf1 = vsadd(buf1, '\\');
+						buf1 = vsadd(buf1, '\\');
 					} else
-						buf1[j++] = stdbuf[i];
+						buf1 = vsadd(buf1, buf[i]);
  				}
- 				buf1[j]= '\0';
 				/* Uncomment to get the last line instead of the first line (see above)
 			    	if (pprevl(p)) {
 			    		p_goto_bol(p);
@@ -209,6 +209,7 @@ char *stagen(char *stalin, BW *bw, const char *s, char fill)
 	cas=localtime(&n);
 
 	stalin = vstrunc(stalin, 0);
+	obj_perm(stalin);
 	while (*s) {
 		if (*s == '%' && s[1]) {
 			field = 0;
@@ -232,8 +233,8 @@ char *stagen(char *stalin, BW *bw, const char *s, char fill)
 						if (ts) {
 							/* We need to translate between file's character set to
 							   locale */
-							my_iconv1(stdbuf, SIZEOF(stdbuf), locale_map,ts);
-							stalin = vsncpy(sv(stalin), sz(stdbuf));
+							char *t = my_iconv1(NULL, locale_map, ts);
+							stalin = vscat(stalin, sv(t));
 						}
 					}
 				}
@@ -263,7 +264,7 @@ char *stagen(char *stalin, BW *bw, const char *s, char fill)
 					stalin = vsncpy(sv(stalin), d + 13, 3);
 				}
 				break;
-			case 'd':
+			    case 'd':
 				{
 					if (s[1]) switch (*++s) {
 						case 'd' : joe_snprintf_1(buf, SIZEOF(buf), "%02d",cas->tm_mday); break;
@@ -273,17 +274,16 @@ char *stagen(char *stalin, BW *bw, const char *s, char fill)
 						case 'w' : joe_snprintf_1(buf, SIZEOF(buf), "%d",cas->tm_wday); break;
 						case 'D' : joe_snprintf_1(buf, SIZEOF(buf), "%03d",cas->tm_yday); break;
 						default : buf[0]='d'; buf[1]=*s; buf[2]=0;
-					} else {
-						buf[0]='d'; buf[1]=0;
 					}
-					stalin=vsncpy(sv(stalin),sz(buf));
+					else { buf[0]='d'; buf[1]=0;}
+						stalin=vsncpy(sv(stalin),sz(buf));
 				}
 				break;
 
-			case 'E':
+				case 'E':
 				{
-					char *ch;
 					int l;
+					char *ch;
 					buf[0]=0;
 					for(l=0;s[l+1] && s[l+1] != '%'; l++) buf[l]=s[l+1];
 					if (s[l+1]=='%' && buf[0]) {
@@ -347,9 +347,7 @@ char *stagen(char *stalin, BW *bw, const char *s, char fill)
 				if (bw->b->name) {
 					char *tmp = simplify_prefix(bw->b->name);
 					char *tmp1 = duplicate_backslashes(sv(tmp));
-					vsrm(tmp);
 					stalin = vsncpy(sv(stalin), sv(tmp1));
-					vsrm(tmp1);
 				} else {
 					stalin = vsncpy(sv(stalin), sz(joe_gettext(_("Unnamed"))));
 				}
@@ -601,8 +599,8 @@ static void disptw(W *w, int flg)
 		if (fmtlen(tw->staright) < w->w) {
 			ptrdiff_t x = fmtpos(tw->stalin, w->w - fmtlen(tw->staright));
 
-			if (x > sLEN(tw->stalin))
-				tw->stalin = vsfill(sv(tw->stalin), fill, x - sLEN(tw->stalin));
+			if (x > vslen(tw->stalin))
+				tw->stalin = vsfill(sv(tw->stalin), fill, x - vslen(tw->stalin));
 			tw->stalin = vsncpy(tw->stalin, fmtpos(tw->stalin, w->w - fmtlen(tw->staright)), sv(tw->staright));
 		}
 		tw->stalin = vstrunc(tw->stalin, fmtpos(tw->stalin, w->w));
@@ -642,11 +640,11 @@ int usplitw(W *w, int k)
 	dostaupd = 1;
 	if (newh / 2 < FITHEIGHT)
 		return -1;
-	neww = wcreate(w->t, w->watom, findbotw(w), NULL, w, newh / 2 + (newh & 1), NULL, NULL);
+	neww = wcreate(w->t, w->watom, findbotw(w), NULL, w, newh / 2 + (newh & 1), NULL);
 	if (!neww)
 		return -1;
 //	wfit(neww->t);
-	neww->object = (void *) (newbw = bwmk(neww, bw->b, 0));
+	neww->object = (void *) (newbw = bwmk(neww, bw->b, 0, NULL));
 	++bw->b->count;
 	newbw->offset = bw->offset;
 	newbw->object = (void *) (newtw = (TW *) joe_malloc(SIZEOF(TW)));
@@ -669,12 +667,12 @@ int uduptw(W *w, int k)
 	WIND_BW(bw, w);
 
 	dostaupd = 1;
-	neww = wcreate(w->t, w->watom, findbotw(w), NULL, NULL, newh, NULL, NULL);
+	neww = wcreate(w->t, w->watom, findbotw(w), NULL, NULL, newh, NULL);
 	if (!neww)
 		return -1;
 	if (demotegroup(w))
 		neww->t->topwin = neww;
-	neww->object = (void *) (newbw = bwmk(neww, bw->b, 0));
+	neww->object = (void *) (newbw = bwmk(neww, bw->b, 0, NULL));
 	++bw->b->count;
 	newbw->offset = bw->offset;
 	newbw->object = (void *) (newtw = (TW *) joe_malloc(SIZEOF(TW)));
@@ -720,6 +718,7 @@ int abortit(W *w, int k)
 	BW *bw;
 	TW *tw;
 	B *b;
+	
 	WIND_BW(bw, w);
 	if (bw->parent->watom != &watomtw)
 		return wabort(bw->parent);
@@ -736,7 +735,7 @@ int abortit(W *w, int k)
 			   any prompt windows? */
 
 			bwrm(bw);
-			w->object = (void *) (bw = bwmk(w, b, 0));
+			w->object = (void *) (bw = bwmk(w, b, 0, NULL));
 			wredraw(bw->parent);
 			bw->object = object;
 			bw = (BW *)w->object;
@@ -744,38 +743,11 @@ int abortit(W *w, int k)
 			return 0;
 		}
 	bwrm(bw);
-	vsrm(tw->stalin);
+	obj_free(tw->stalin);
 	joe_free(tw);
 	w->object = NULL;
 	wabort(w);	/* Eliminate this window and it's children */
 	return 0;
-}
-
-/* User routine for aborting a text window */
-
-static int naborttw(W *w, int k, void *object, int *notify)
-{
-	BW *bw = (BW *)w->object;
-	if (notify)
-		*notify = 1;
-	if (k != YES_CODE && !yncheck(yes_key, k))
-		return -1;
-
-	if (bw->b->count == 1)
-		genexmsg(bw, 0, NULL);
-	return abortit(bw->parent, 0);
-}
-
-static int naborttw1(W *w, int k, void *object, int *notify)
-{
-	BW *bw = (BW *)w->object;
-	if (notify)
-		*notify = 1;
-	if (k != YES_CODE && !yncheck(yes_key, k))
-		return -1;
-
-	if (!exmsg) genexmsg(bw, 0, NULL);
-	return abortit(bw->parent, 0);
 }
 
 static B *wpop(BW *bw)
@@ -817,6 +789,7 @@ int upopabort(W *w, int k)
 int uabort(W *w, int k)
 {
 	BW *bw;
+	
 	if (w->watom != &watomtw)
 		return wabort(w);
 	WIND_BW(bw, w);
@@ -837,13 +810,14 @@ int uabort(W *w, int k)
 	}
 	if (bw->b->pid && bw->b->count==1)
 		return ukillpid(bw->parent, 0);
-	if (bw->b->changed && bw->b->count == 1 && !bw->b->scratch)
-		if (mkqw(w, sz(joe_gettext(_("Lose changes to this file (y,n,%{abort})? "))), naborttw, NULL, NULL, NULL))
-			return 0;
-		else
+	if (bw->b->changed && bw->b->count == 1 && !bw->b->scratch) {
+		int c = query(w, sz(joe_gettext(_("Lose changes to this file (y,n,%{abort})? "))), 0);
+		if (!yncheck(yes_key, c))
 			return -1;
-	else
-		return naborttw(bw->parent, YES_CODE, NULL, NULL);
+	}
+	if (bw->b->count == 1)
+		genexmsg(bw, 0, NULL);
+	return abortit(w, NO_MORE_DATA);
 }
 
 int ucancel(W *w, int k)
@@ -860,18 +834,20 @@ int ucancel(W *w, int k)
 int uabort1(W *w, int k)
 {
 	BW *bw;
+	
 	if (w->watom != &watomtw)
 		return wabort(w);
+	
 	bw = (BW *)w->object;
 	if (bw->b->pid && bw->b->count==1)
 		return ukillpid(bw->parent, 0);
-	if (bw->b->changed && bw->b->count == 1 && !bw->b->scratch)
-		if (mkqw(w, sz(joe_gettext(_("Lose changes to this file (y,n,%{abort})? "))), naborttw1, NULL, NULL, NULL))
-			return 0;
-		else
+	if (bw->b->changed && bw->b->count == 1 && !bw->b->scratch) {
+		int c = query(w, sz(joe_gettext(_("Lose changes to this file (y,n,%{abort})? "))), 0);
+		if (!yncheck(yes_key, c))
 			return -1;
-	else
-		return naborttw1(w, YES_CODE, NULL, NULL);
+	}
+	if (!exmsg) genexmsg(bw, 0, NULL);
+	return abortit(w, NO_MORE_DATA);
 }
 
 /* Abort buffer without prompting: just fail if this is last window on buffer */
@@ -893,13 +869,15 @@ int uabortbuf(W *w, int k)
 		void *object = bw->object;
 
 		bwrm(bw);
-		w->object = (void *) (bw = bwmk(w, b, 0));
+		w->object = (void *) (bw = bwmk(w, b, 0, NULL));
 		wredraw(bw->parent);
 		bw->object = object;
 		return 0;
 	}
 
-	return naborttw(w, YES_CODE, NULL, NULL);
+	if (bw->b->count == 1)
+		genexmsg(bw, 0, NULL);
+	return abortit(w, NO_MORE_DATA);
 }
 
 /* Kill current window (orphans buffer) */
@@ -984,9 +962,9 @@ BW *wmktw(Screen *t, B *b)
 	BW *bw;
 	TW *tw;
 
-	w = wcreate(t, &watomtw, NULL, NULL, NULL, t->h, NULL, NULL);
+	w = wcreate(t, &watomtw, NULL, NULL, NULL, t->h, NULL);
 	wfit(w->t);
-	w->object = (void *) (bw = bwmk(w, b, 0));
+	w->object = (void *) (bw = bwmk(w, b, 0, NULL));
 	bw->object = (void *) (tw = (TW *) joe_malloc(SIZEOF(TW)));
 	iztw(tw, w->y);
 	return bw;
