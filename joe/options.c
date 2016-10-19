@@ -232,7 +232,6 @@ void lazy_opts(B *b, OPTIONS *o)
 			b->o.hex |= HEX_RESTORE_PICTURE;
 		}
 	}
-	
 }
 
 /* Set local options depending on file name and contents */
@@ -483,7 +482,7 @@ static char **getftypes(void)
 
 	for (o = options_list; o; o = o->next)
 		s = vaadd(s, vsncpy(NULL, 0, sz(o->ftype)));
-	vasort(s, aLen(s));
+	vasort(s, valen(s));
 	return s;
 }
 
@@ -491,8 +490,10 @@ char **ftypes = NULL;	/* Array of file types */
 
 static int ftypecmplt(BW *bw, int k)
 {
-	if (!ftypes)
+	if (!ftypes) {
 		ftypes = getftypes();
+		vaperm(ftypes);
+	}
 	return simple_cmplt(bw, ftypes);
 }
 
@@ -503,24 +504,6 @@ static OPTIONS *find_ftype(const char *s)
 		if (!zcmp(o->ftype, s))
 			break;
 	return o;
-}
-
-static int doftype(W *w, char *s, void *object, int *notify)
-{
-	BW *bw;
-	OPTIONS *o = find_ftype(s);
-	WIND_BW(bw, w);
-	vsrm(s);
-	if (!o) {
-		msgnw(bw->parent, joe_gettext(_("No such file type")));
-		if (notify)
-			*notify = 1;
-		return -1;
-	} else {
-		lazy_opts(bw->b, o);
-		bw->o = bw->b->o;
-		return 0;
-	}
 }
 
 B *ftypehist = NULL;
@@ -845,114 +828,6 @@ int glopt(char *s, char *arg, OPTIONS *options, int set)
 	return ret;
 }
 
-/* Option setting user interface (^T command) */
-
-static int doabrt1(W *w, void *obj)
-{
-	int *xx = (int *)obj;
-	joe_free(xx);
-	return -1;
-}
-
-static int doopt1(W *w, char *s, void *obj, int *notify)
-{
-	BW *bw;
-	int ret = 0;
-	int *xx = (int *)obj;
-	int x = *xx;
-	int v;
-	off_t vv;
-	WIND_BW(bw, w);
-
-	joe_free(xx);
-	switch (glopts[x].type) {
-	case 1:
-		v = (int)calc(bw, s, 0);
-		if (merr) {
-			msgnw(bw->parent, merr);
-			ret = -1;
-		} else if (v >= glopts[x].low && v <= glopts[x].high)
-			*(int *)glopts[x].set = v;
-		else {
-			msgnw(bw->parent, joe_gettext(_("Value out of range")));
-			ret = -1;
-		}
-		break;
-	case 2:
-		if (s[0])
-			*(char **) glopts[x].set = zdup(s);
-		break;
-	case 6:
-		*(char **)((char *)&bw->o+glopts[x].ofst) = zdup(s);
-		break;
-	case 5:
-		v = (int)calc(bw, s, 0);
-		if (merr) {
-			msgnw(bw->parent, merr);
-			ret = -1;
-		} else if (v >= glopts[x].low && v <= glopts[x].high)
-			*(int *) ((char *) &bw->o + glopts[x].ofst) = v;
-		else {
-			msgnw(bw->parent, joe_gettext(_("Value out of range")));
-			ret = -1;
-		}
-		break;
-	case 14:
-		vv = (off_t)calc(bw, s, 0);
-		if (merr) {
-			msgnw(bw->parent, merr);
-			ret = -1;
-		} else if (vv >= glopts[x].low && vv <= glopts[x].high)
-			*(off_t *) ((char *) &bw->o + glopts[x].ofst) = vv;
-		else {
-			msgnw(bw->parent, joe_gettext(_("Value out of range")));
-			ret = -1;
-		}
-		break;
-	case 7:
-		vv = (off_t)(calc(bw, s, 0) - 1.0);
-		if (merr) {
-			msgnw(bw->parent, merr);
-			ret = -1;
-		} else if (vv >= glopts[x].low && vv <= glopts[x].high)
-			*(off_t *) ((char *) &bw->o + glopts[x].ofst) = vv;
-		else {
-			msgnw(bw->parent, joe_gettext(_("Value out of range")));
-			ret = -1;
-		}
-		break;
-	}
-	vsrm(s);
-	bw->b->o = bw->o;
-	wfit(bw->parent->t);
-	updall();
-	if (notify)
-		*notify = 1;
-	return ret;
-}
-
-static int dosyntax(W *w, char *s, void *obj, int *notify)
-{
-	BW *bw;
-	int ret = 0;
-	struct high_syntax *syn;
-	WIND_BW(bw, w);
-
-	syn = load_syntax(s);
-
-	if (syn)
-		bw->o.syntax = syn;
-	else
-		msgnw(bw->parent, joe_gettext(_("Syntax definition file not found")));
-
-	vsrm(s);
-	bw->b->o = bw->o;
-	updall();
-	if (notify)
-		*notify = 1;
-	return ret;
-}
-
 char **syntaxes = NULL; /* Array of available syntaxes */
 
 static int syntaxcmplt(BW *bw, int k)
@@ -963,62 +838,55 @@ static int syntaxcmplt(BW *bw, int k)
 		char **syntmp = NULL;
 		char *p;
 		int x, y;
-		
-		/* Load first from global (NOTE: Order here does not matter.) */
+
+		syntmp = vamk(1);
 		if (!chpwd((JOEDATA "syntax")) && (t = rexpnd("*.jsf"))) {
-			for (x = 0; x != aLEN(t); ++x) {
+			for (x = 0; x != valen(t); ++x) {
 				char *r = vsncpy(NULL,0,t[x],zrchr((t[x]),'.')-t[x]);
 				syntmp = vaadd(syntmp,r);
 			}
-			
-			varm(t);
 		}
-		
-		/* Load from home directory. */
+
 		p = getenv("HOME");
 		if (p) {
-			char buf[1024];
-			joe_snprintf_1(buf,SIZEOF(buf),"%s/.joe/syntax",p);
-			
+			char *buf = vsfmt(NULL, 0, "%s/.joe/syntax",p);
+
 			if (!chpwd(buf) && (t = rexpnd("*.jsf"))) {
-				for (x = 0; x != aLEN(t); ++x)
+				for (x = 0; x != valen(t); ++x)
 					*zrchr(t[x],'.') = 0;
-				for (x = 0; x != aLEN(t); ++x) {
-					for (y = 0; y != aLEN(syntmp); ++y)
+				for (x = 0; x != valen(t); ++x) {
+					for (y = 0; y != valen(syntmp); ++y)
 						if (!zcmp(t[x],syntmp[y]))
 							break;
-					if (y == aLEN(syntmp)) {
+					if (y == valen(syntmp)) {
 						char *r = vsncpy(NULL,0,sv(t[x]));
 						syntmp = vaadd(syntmp,r);
 					}
 				}
-				varm(t);
 			}
 		}
-		
-		/* Load from builtins. */
+
+		/* Load from builtins */
 		t = jgetbuiltins(".jsf");
-		for (x = 0; x != aLEN(t); ++x) {
+		for (x = 0; x != valen(t); ++x) {
 			*zrchr(t[x], '.') = 0;
-			for (y = 0; y != aLEN(syntmp); ++y)
-				if (!zcmp(t[x], syntmp[y]))
+			for (y = 0; y != valen(syntmp); ++y)
+				if (!zcmp(t[x], syntmp[y])) 
 					break;
-			if (y == aLEN(syntmp)) {
+			if (y == valen(syntmp)) {
 				char *r = vsncpy(NULL, 0, sv(t[x]));
-				syntmp = vaadd(syntmp, r);
+				syntmp = vaadd(syntmp,r);
 			}
 		}
-		
-		varm(t);
-		
-		if (aLEN(syntmp)) {
+
+		if (valen(syntmp)) {
+			vaperm(syntmp);
 			vasort(av(syntmp));
 			syntaxes = syntmp;
 		}
 
 		chpwd(oldpwd);
 	}
-	
 	return simple_cmplt(bw,syntaxes);
 }
 
@@ -1032,39 +900,6 @@ static int check_for_hex(BW *bw)
 		    ((BW *)w->object)->o.hex)
 		    	return 1;
 	return 0;
-}
-
-static int doencoding(W *w, char *s, void *obj, int *notify)
-{
-	BW *bw;
-	int ret = 0;
-	struct charmap *map;
-	WIND_BW(bw, w);
-
-	map = find_charmap(s);
-
-	if (map && map->type && check_for_hex(bw)) {
-		msgnw(bw->parent, joe_gettext(_("UTF-8 encoding not allowed with hexadecimal windows")));
-		if (notify)
-			*notify = 1;
-		return -1;
-	}
-
-	if (map) {
-		bw->o.charmap = map;
-		joe_snprintf_1(msgbuf, JOE_MSGBUFSIZE, joe_gettext(_("%s encoding assumed for this file")), map->name);
-		msgnw(bw->parent, msgbuf);
-	} else
-		msgnw(bw->parent, joe_gettext(_("Character set not found")));
-
-	vsrm(s);
-	bw->b->o = bw->o;
-	bw->cursor->valcol = 0;
-	bw->cursor->xcol = piscol(bw->cursor);
-	updall();
-	if (notify)
-		*notify = 1;
-	return ret;
 }
 
 char **encodings = NULL; /* Array of available encodings */
@@ -1109,38 +944,43 @@ static int applyopt(BW *bw, void *optp, int y, int flg)
 	return oldval;
 }
 
-static int olddoopt(BW *bw, int y, int flg, int *notify)
+static int olddoopt(BW *bw, int y, int flg)
 {
-	int *xx, oldval;
-	char buf[OPT_BUF_SIZE];
+	int ret = 0;
+	char *buf = 0;
+	char *s;
 
 	if (y >= 0) {
 		switch (glopts[y].type) {
-		case 0:
-			applyopt(bw, glopts[y].set, y, flg);
-			break;
-		case 4:
-			oldval = applyopt(bw, (char *) &bw->o + glopts[y].ofst, y, flg);
-			
-			/* Propagate readonly bit to B */
-			if (glopts[y].ofst == (char *) &fdefault.readonly - (char *) &fdefault)
-				bw->b->rdonly = bw->o.readonly;
-			
-			/* Kill UTF-8 and CRLF modes if we switch to hex display */
-			if (glopts[y].ofst == (char *) &fdefault.hex - (char *) &fdefault) {
-				if (bw->o.hex && !oldval) {
-					bw->o.hex = 1;
-					if (bw->b->o.charmap->type) {
-						/* Switch out of UTF-8 mode */
-						doencoding(bw->parent, vsncpy(NULL, 0, sc("C")), NULL, NULL);
-						bw->o.hex |= HEX_RESTORE_UTF8;
-					}
-					
-					if (bw->o.crlf) {
-						/* Switch out of CRLF mode */
-						bw->o.crlf = 0;
-						bw->o.hex |= HEX_RESTORE_CRLF;
-					}
+			case 0: { /* Global option flag */
+				applyopt(bw, glopts[y].set, y, flg);
+				break;
+			} case 4: { /* Local option flag */
+				int oldval = applyopt(bw, (char *)&bw->o + glopts[y].ofst, y, flg);
+				
+				/* Propagate readonly bit to B */
+				if (glopts[y].ofst == (char *)&fdefault.readonly - (char *)&fdefault)
+					bw->b->rdonly = bw->o.readonly;
+				
+				/* Kill UTF-8 and CRLF modes if we switch to hex display */
+				if (glopts[y].ofst == (char *)&fdefault.hex - (char *)&fdefault) {
+					if (bw->o.hex && !oldval) {
+						bw->o.hex = 1;
+						if (bw->b->o.charmap->type) {
+							/* Switch out of UTF-8 mode */
+							bw->o.hex |= HEX_RESTORE_UTF8;
+							bw->o.charmap = find_charmap("c");
+							bw->b->o = bw->o;
+							wfit(bw->parent->t);
+							bw->cursor->xcol = pfcol(bw->cursor)->col;
+							updall();
+						}
+						
+						if (bw->o.crlf) {
+							/* Switch out of CRLF mode */
+							bw->o.crlf = 0;
+							bw->o.hex |= HEX_RESTORE_CRLF;
+						}
 
 					if (!bw->o.overtype) {
 						bw->o.overtype = 1;
@@ -1166,18 +1006,22 @@ static int olddoopt(BW *bw, int y, int flg, int *notify)
 						bw->o.picture = 0;
 						bw->o.hex |= HEX_RESTORE_PICTURE;
 					}
-					/* Try to put entire hex dump on screen in case where we were
-					   scrolled far to the right */
-					bw->offset = 0;
-				} else if (!bw->o.hex && oldval) {
-					if ((oldval & HEX_RESTORE_UTF8) && !zcmp(bw->b->o.charmap->name, "ascii")) {
-						/* Switch back into UTF-8 */
-						doencoding(bw->parent, vsncpy(NULL, 0, sc("UTF-8")), NULL, NULL);
-					}
-					
-					if (oldval & HEX_RESTORE_CRLF) {
-						/* Turn CRLF back on */
-						bw->o.crlf = 1;
+						/* Try to put entire hex dump on screen in case where we were
+						   scrolled far to the right */
+						bw->offset = 0;
+					} else if (!bw->o.hex && oldval) {
+						if ((oldval & HEX_RESTORE_UTF8) && !zcmp(bw->b->o.charmap->name, "ascii")) {
+							/* Switch back into UTF-8 */
+							bw->o.charmap = find_charmap("utf-8");
+							bw->b->o = bw->o;
+							wfit(bw->parent->t);
+							bw->cursor->xcol = pfcol(bw->cursor)->col;
+							updall();
+						}
+						
+						if (oldval & HEX_RESTORE_CRLF) {
+							/* Turn CRLF back on */
+							bw->o.crlf = 1;
 					}
 
 					if (oldval & HEX_RESTORE_INSERT) {
@@ -1194,96 +1038,190 @@ static int olddoopt(BW *bw, int y, int flg, int *notify)
 					}
 					if (oldval & HEX_RESTORE_PICTURE) {
 						bw->o.picture = 1;
+						}
+						/* Update column in case we moved while in hex mode */
+						bw->cursor->xcol = piscol(bw->cursor);
 					}
-					/* Update column in case we moved while in hex mode */
-					bw->cursor->xcol = piscol(bw->cursor);
+				}
+				break;
+			} case 6: { /* Local option string */
+				/* Get current string */
+				s = *(char **)((char *)&bw->o + glopts[y].ofst);
+				if (!s)
+					s = "";
+				/* Generate message */
+				buf = vsfmt(buf, 0, glopts[y].yes, s);
+
+				s = ask(bw->parent, buf, NULL, NULL, utypebw, utf8_map, 0, 0, NULL);
+				if (s) {
+					*(char **)((char *)&bw->o + glopts[y].ofst) = zdup(s);
+					break;
+				} else {
+					return -1;
+				}
+			} case 1: { /* global option numeric */
+				buf = vsfmt(buf, 0, joe_gettext(glopts[y].yes), *(int *)glopts[y].set);
+				s = ask(bw->parent, buf, NULL, NULL, math_cmplt, utf8_map, 0, 0, NULL);
+				if (s) {
+					int v = calc(bw, s, 0);
+					if (merr) {
+						msgnw(bw->parent, merr);
+						ret = -1;
+					} else if (v >= glopts[y].low && v <= glopts[y].high)
+						*(int *)glopts[y].set = v;
+					else {
+						msgnw(bw->parent, joe_gettext(_("Value out of range")));
+						ret = -1;
+					}
+
+					break;
+				} else
+					return -1;
+			} case 2: { /* global option string */
+				s = *(char **) glopts[y].set;
+				if (!s)
+					s = "";
+				buf = vsfmt(buf, 0, joe_gettext(glopts[y].yes), s);
+
+				s = ask(bw->parent, buf, NULL, NULL, utypebw, locale_map, 0, 0, NULL);
+				if (s) {
+					*(char **)glopts[y].set = zdup(s);
+					break;
+				} else {
+					return -1;
+				}
+			} case 5: { /* local option numeric */
+				buf = vsfmt(buf, 0, joe_gettext(glopts[y].yes), *(int *) ((char *) &bw->o + glopts[y].ofst));
+				s = ask(bw->parent, buf, NULL, NULL, utypebw, locale_map, 0, 0, NULL);
+				if (s) {
+					double v = calc(bw, s, 0);
+					if (merr) {
+						msgnw(bw->parent, merr);
+						ret = -1;
+					} else if (v >= glopts[y].low && v <= glopts[y].high) {
+						*(int *) ((char *) &bw->o + glopts[y].ofst) = v;
+					} else {
+						msgnw(bw->parent, joe_gettext(_("Value out of range")));
+						ret = -1;
+					}
+					break;
+				} else {
+					return -1;
+				}
+			} case 14: {
+				buf = vsfmt(buf, 0, joe_gettext(glopts[y].yes), (long long)*(off_t *) ((char *) &bw->o + glopts[y].ofst));
+				s = ask(bw->parent, buf, NULL, NULL, math_cmplt, utf8_map, 0, 0, NULL);
+
+				if (s) {
+					off_t v = (off_t)(calc(bw, s, 0) - 1.0);
+					if (merr) {
+						msgnw(bw->parent, merr);
+						ret = -1;
+					} else if (v >= glopts[y].low && v <= glopts[y].high) {
+						*(off_t *) ((char *) &bw->o + glopts[y].ofst) = v;
+					} else {
+						msgnw(bw->parent, joe_gettext(_("Value out of range")));
+						ret = -1;
+					}
+					break;
+				} else {
+					return -1;
+				}
+			} case 7: { /* local option numeric+1, with range checking */
+				buf = vsfmt(buf, 0, joe_gettext(glopts[y].yes), *(int *) ((char *) &bw->o + glopts[y].ofst) + 1);
+				s = ask(bw->parent, buf, NULL, NULL, math_cmplt, utf8_map, 0, 0, NULL);
+
+				if (s) {
+					off_t v = (off_t)(calc(bw, s, 0) - 1.0);
+					if (merr) {
+						msgnw(bw->parent, merr);
+						ret = -1;
+					} else if (v >= glopts[y].low && v <= glopts[y].high) {
+						*(off_t *) ((char *) &bw->o + glopts[y].ofst) = v;
+					} else {
+						msgnw(bw->parent, joe_gettext(_("Value out of range")));
+						ret = -1;
+					}
+					break;
+				} else {
+					return -1;
+				}
+			} case 9: { /* Choose syntax */
+				buf = vsfmt(buf, 0, joe_gettext(glopts[y].yes), "");
+				s = ask(bw->parent, buf, NULL, NULL, syntaxcmplt, utf8_map, 0, 0, NULL);
+
+				if (s) {
+					struct high_syntax *syn;
+
+					syn = load_syntax(s);
+
+					if (syn) {
+						bw->o.syntax = syn;
+						break;
+					} else {
+						msgnw(bw->parent, joe_gettext(_("Syntax definition file not found")));
+						return -1;
+					}
+				} else {
+					return -1;
+				}
+			} case 13: { /* Choose encoding */
+				buf = vsfmt(buf, 0, joe_gettext(glopts[y].yes), "");
+				s = ask(bw->parent, buf, NULL, NULL, encodingcmplt, utf8_map, 0, 0, NULL);
+				if (s) {
+					struct charmap *map;
+
+					map = find_charmap(s);
+					if (map && map->type && check_for_hex(bw)) {
+						msgnw(bw->parent, joe_gettext(_("UTF-8 encoding not allowed with hexadecimal windows")));
+						return -1;
+					}
+
+					if (map) {
+						bw->o.charmap = map;
+						msgnw(bw->parent, vsfmt(NULL, 0, joe_gettext(_("%s encoding assumed for this file")), map->name));
+						bw->b->o = bw->o;
+						wfit(bw->parent->t);
+						bw->cursor->xcol = pfcol(bw->cursor)->col;
+						updall();
+						return ret;
+					} else {
+						msgnw(bw->parent, joe_gettext(_("Character set not found")));
+						return -1;
+					}
+				} else {
+					return -1;
+				}
+			} case 15: {
+				buf = vsfmt(buf, 0, joe_gettext(glopts[y].yes), "");
+				s = ask(bw->parent, buf, &ftypehist, NULL, ftypecmplt, utf8_map, 0, 0, NULL);
+				if (s) {
+					OPTIONS *o = find_ftype(s);
+					
+					if (!o) {
+						msgnw(bw->parent, joe_gettext(_("No such file type")));
+						return -1;
+					}
+					
+					lazy_opts(bw->b, o);
+					bw->o = bw->b->o;
+					return 0;
+				} else {
+					return -1;
 				}
 			}
-			break;
-		case 6:
-			xx = (int *) joe_malloc(SIZEOF(int));
-			*xx = y;
-			if(*(char **)((char *)&bw->o+glopts[y].ofst))
-				joe_snprintf_1(buf, OPT_BUF_SIZE, glopts[y].yes,*(char **)((char *)&bw->o+glopts[y].ofst));
-			else
-				joe_snprintf_1(buf, OPT_BUF_SIZE, glopts[y].yes,"");
-			if(wmkpw(bw->parent, buf, NULL, doopt1, NULL, doabrt1, utypebw, xx, notify, utf8_map, 0))
-				return 0;
-			else
-				return -1;
-			/* break; warns on some systems */
-		case 1:
-			joe_snprintf_1(buf, OPT_BUF_SIZE, joe_gettext(glopts[y].yes), *(int *)glopts[y].set);
-			xx = (int *) joe_malloc(SIZEOF(int));
-
-			*xx = y;
-			if (wmkpw(bw->parent, buf, NULL, doopt1, NULL, doabrt1, math_cmplt, xx, notify, utf8_map, 0))
-				return 0;
-			else
-				return -1;
-		case 2:
-			if (*(char **) glopts[y].set)
-				joe_snprintf_1(buf, OPT_BUF_SIZE, joe_gettext(glopts[y].yes), *(char **) glopts[y].set);
-			else
-				joe_snprintf_1(buf, OPT_BUF_SIZE, joe_gettext(glopts[y].yes), "");
-			xx = (int *) joe_malloc(SIZEOF(int));
-
-			*xx = y;
-			if (wmkpw(bw->parent, buf, NULL, doopt1, NULL, doabrt1, utypebw, xx, notify, locale_map, 0))
-				return 0;
-			else
-				return -1;
-		case 5:
-			joe_snprintf_1(buf, OPT_BUF_SIZE, joe_gettext(glopts[y].yes), *(int *) ((char *) &bw->o + glopts[y].ofst));
-			goto in;
-		case 14:
-			joe_snprintf_1(buf, OPT_BUF_SIZE, joe_gettext(glopts[y].yes), (long long)*(off_t *) ((char *) &bw->o + glopts[y].ofst));
-			goto in;
-		case 7:
-			joe_snprintf_1(buf, OPT_BUF_SIZE, joe_gettext(glopts[y].yes), *(int *) ((char *) &bw->o + glopts[y].ofst) + 1);
-		      in:xx = (int *) joe_malloc(SIZEOF(int));
-
-			*xx = y;
-			if (wmkpw(bw->parent, buf, NULL, doopt1, NULL, doabrt1, math_cmplt, xx, notify, utf8_map, 0))
-				return 0;
-			else
-				return -1;
-
-		case 9:
-			joe_snprintf_1(buf, OPT_BUF_SIZE, joe_gettext(glopts[y].yes), "");
-			if (wmkpw(bw->parent, buf, NULL, dosyntax, NULL, NULL, syntaxcmplt, NULL, notify, utf8_map, 0))
-				return 0;
-			else
-				return -1;
-
-		case 13:
-			joe_snprintf_1(buf, OPT_BUF_SIZE, joe_gettext(glopts[y].yes), "");
-			if (wmkpw(bw->parent, buf, NULL, doencoding, NULL, NULL, encodingcmplt, NULL, notify, utf8_map, 0))
-				return 0;
-			else
-				return -1;
-
-		case 15:
-			joe_snprintf_1(buf, OPT_BUF_SIZE, joe_gettext(glopts[y].yes), "");
-			if (wmkpw(bw->parent, buf, &ftypehist, doftype, "ftype", NULL, ftypecmplt, NULL, notify, utf8_map, 0))
-				return 0;
-			else
-				return -1;
 		}
 	}
-	if (notify)
-		*notify = 1;
 	bw->b->o = bw->o;
 	wfit(bw->parent->t);
 	updall();
-	return 0;
+	return ret;
 }
 
 /* Get option in printable format for %Zoption-name% */
 
 const char *get_status(BW *bw, char *s)
 {
-	static char buf[OPT_BUF_SIZE];
 	int y = find_option(s);
 	if (y == -1)
 		return "???";
@@ -1292,39 +1230,31 @@ const char *get_status(BW *bw, char *s)
 			case 0: {
 				return *(int *)glopts[y].set ? "ON" : "OFF";
 			} case 1: {
-				joe_snprintf_1(buf, OPT_BUF_SIZE, "%d", *(int *)glopts[y].set);
-				return buf;
+				return vsfmt(NULL, 0, "%d", *(int *)glopts[y].set);
 			} case 2: {
-				joe_snprintf_1(buf, OPT_BUF_SIZE, "%s", *(char **)glopts[y].set ? *(char **)glopts[y].set : "");
-				return buf;
+				return vsfmt(NULL, 0, "%s", *(char **)glopts[y].set ? *(char **)glopts[y].set : "");
 			} case 4: {
 				return *(int *) ((char *) &bw->o + glopts[y].ofst) ? "ON" : "OFF";
 			} case 5: {
-				joe_snprintf_1(buf, OPT_BUF_SIZE, "%d", *(int *) ((char *) &bw->o + glopts[y].ofst));
-				return buf;
+				return vsfmt(NULL, 0, "%d", *(int *) ((char *) &bw->o + glopts[y].ofst));
 			} case 6: {
-				joe_snprintf_1(buf, OPT_BUF_SIZE, "%s", *(char **)((char *) &bw->o + glopts[y].ofst) ? *(char **)((char *) &bw->o + glopts[y].ofst) : "");
-				return buf;
+				return vsfmt(NULL, 0, "%s", *(char **)((char *) &bw->o + glopts[y].ofst) ? *(char **)((char *) &bw->o + glopts[y].ofst) : "");
 			} case 7: {
 #ifdef HAVE_LONG_LONG
-				joe_snprintf_1(buf, OPT_BUF_SIZE, "%lld", (long long)*(off_t *) ((char *) &bw->o + glopts[y].ofst) + 1);
+				return vsfmt(NULL, 0, "%lld", (long long)*(off_t *) ((char *) &bw->o + glopts[y].ofst) + 1);
 #else
-				joe_snprintf_1(buf, OPT_BUF_SIZE, "%ld", (long)*(off_t *) ((char *) &bw->o + glopts[y].ofst) + 1);
+				return vsfmt(NULL, 0, "%ld", (long)*(off_t *) ((char *) &bw->o + glopts[y].ofst) + 1);
 #endif
-				return buf;
 			} case 9: {
-				joe_snprintf_1(buf, OPT_BUF_SIZE, "%s", bw->o.syntax_name ? bw->o.syntax_name : "");
-				return buf;
+				return vsfmt(NULL, 0, "%s", bw->o.syntax_name ? bw->o.syntax_name : "");
 			} case 13: {
-				joe_snprintf_1(buf, OPT_BUF_SIZE, "%s", bw->o.map_name ? bw->o.map_name : "");
-				return buf;
+				return vsfmt(NULL, 0, "%s", bw->o.map_name ? bw->o.map_name : "");
 			} case 14: {
 #ifdef HAVE_LONG_LONG
-				joe_snprintf_1(buf, OPT_BUF_SIZE, "%lld", (long long)*(off_t *) ((char *) &bw->o + glopts[y].ofst));
+				return vsfmt(NULL, 0, "%lld", (long long)*(off_t *) ((char *) &bw->o + glopts[y].ofst));
 #else
-				joe_snprintf_1(buf, OPT_BUF_SIZE, "%ld", (long)*(off_t *) ((char *) &bw->o + glopts[y].ofst));
+				return vsfmt(NULL, 0, "%ld", (long)*(off_t *) ((char *) &bw->o + glopts[y].ofst));
 #endif
-				return buf;
 			} case 15: {
 				return bw->o.ftype;
 			} default: {
@@ -1340,10 +1270,11 @@ static char **getoptions(void)
 {
 	char **s = vaensure(NULL, 20);
 	int x;
+	vaperm(s);
 
 	for (x = 0; glopts[x].name; ++x)
 		s = vaadd(s, vsncpy(NULL, 0, sz(glopts[x].name)));
-	vasort(s, aLen(s));
+	vasort(av(s));
 	return s;
 }
 
@@ -1358,31 +1289,26 @@ static int optcmplt(BW *bw, int k)
 	return simple_cmplt(bw,sopts);
 }
 
-static int doopt(W *w, char *s, void *object, int *notify)
-{
-	BW *bw;
-	int y = find_option(s);
-	WIND_BW(bw, w);
-	vsrm(s);
-	if (y == -1) {
-		msgnw(bw->parent, joe_gettext(_("No such option")));
-		if (notify)
-			*notify = 1;
-		return -1;
-	} else {
-		int flg = menu_flg;
-		menu_flg = 0;
-		return olddoopt(bw, y, flg, notify);
-	}
-}
-
 B *opthist = NULL;
 
 int umode(W *w, int k)
 {
-	if (wmkpw(w, joe_gettext(_("Option: ")), &opthist, doopt, "opt", NULL, optcmplt, NULL, NULL, locale_map, 0)) {
-		return 0;
-	} else {
+	BW *bw;
+	int y;
+	char *s = ask(w, joe_gettext(_("Options: ")), &opthist, "opt", optcmplt, locale_map, 0, 0, NULL);
+
+	WIND_BW(bw, w);
+	
+	if (!s)
 		return -1;
+	
+	y = find_option(s);
+	if (y == -1) {
+		msgnw(bw->parent, joe_gettext(_("No such option")));
+		return -1;
+	} else {
+		int flg = menu_flg;
+		menu_flg = 0;
+		return olddoopt(bw, y, flg);
 	}
 }

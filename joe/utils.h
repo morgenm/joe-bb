@@ -8,55 +8,6 @@
  *	This file is part of JOE (Joe's Own Editor)
  */
 
-/* Destructors */
-
-#define AUTO_DESTRUCT GC *gc = 0;
-
-typedef struct gc GC;
-
-struct gc {
-	struct gc *next;	/* List */
-	void **var;		/* Address of pointer variable */
-	void (*rm)(void *val);	/* Destructor which takes pointer variable */
-};
-
-/* Add a variable to GC list */
-
-void gc_add(GC **gc, void **var, void (*rm)(void *val));
-
-/* Call destructors */
-
-void gc_collect(GC **gc);
-
-/* Version of return which calls destructors before returning */
-
-#define RETURN(val) do { \
-	if (gc) gc_collect(&gc); \
-	return (val); \
-	} while(0)
-
-/* Pool allocation functions using singly-linked lists */
-
-extern void *ITEM; /* Temporary global variable (from queue.c) */
-
-/* Allocate item from free-list.  If free-list empty, replenish it. */
-
-void *replenish(void **list,ptrdiff_t size);
-
-#define al_single(list,type) ( \
-	(ITEM = *(void **)(list)) ? \
-	  ( (*(void **)(list) = *(void **)ITEM), ITEM ) \
-	: \
-	  replenish((void **)(list),sizeof(type)) \
-)
-
-/* Put item on free list */
-
-#define fr_single(list,item) do { \
-	*(void **)(item) = *(void **)(list); \
-	*(void **)(list) = (void *)(item); \
-} while(0)
-
 /* JOE's version of zero-terminated string (z-string) functions.
    In older versions of JOE we had these because the library versions were slow. 
    In older versions of JOE we had these because we globally used "unsigned char *" strings.
@@ -70,14 +21,6 @@ void *replenish(void **list,ptrdiff_t size);
 #define zdup(s) strdup(s)
 #define zcpy(a, b) strcpy((a), (b))
 #define zcmp(a, b) strcmp((a), (b))
-
-/* char *zstr(const char *a, const char *b); */
-/* char *zchr(const char *s, int c); */
-/* char *zrchr(const char *s, int c); */
-/* char *zcat(char *a, char *b); */
-/* char *zdup(const char *s); */
-/* char *zcpy(char *a, char *b); */
-/* int zcmp(char *a, char *b); */
 
 #define zlen(s) (ptrdiff_t)strlen(s)
 
@@ -108,8 +51,8 @@ ptrdiff_t Zlen(const int *s);
 int Zcmp(const int *a, const int *b);
 int *Zlcpy(int *a, ptrdiff_t siz, const int *b);
 int *Zdup(const int *s);
-char *Ztoutf8(char *a, ptrdiff_t len, const int *b);
-char *Ztoz(char *a, ptrdiff_t len, const int *b);
+char *Ztoutf8(char *dest, const int *src);
+char *Ztoz(char *dest, const int *src);
  
 /*
  * Functions which return minimum/maximum of two numbers  
@@ -152,9 +95,9 @@ int joe_set_signal(int signum, sighandler_t handler);
 int parse_ws(const char * *p,int cmt);
 int parse_wsn(const char * *p,int cmt);
 int parse_wsl(const char * *p,int cmt);
-int parse_ident(const char **p,char *buf,ptrdiff_t len);
+int parse_ident(const char * *p,char **buf);
 int parse_kw(const char **p,const char *kw);
-int parse_tows(const char **p,char *buf);
+int parse_tows(const char **p,char **buf);
 int parse_field(const char **p,const char *field);
 int parse_char(const char **p,char c);
 int parse_int(const char **p,int *buf);
@@ -168,8 +111,8 @@ ptrdiff_t ztodiff(const char *s);
 ptrdiff_t zhtodiff(const char *s);
 int ztoi(const char *s);
 int zhtoi(const char *s);
-ptrdiff_t parse_string(const char **p,char *buf,ptrdiff_t len);
-ptrdiff_t parse_Zstring(const char **p,int *buf,ptrdiff_t len);
+ptrdiff_t parse_string(const char **p,char **dst);
+ptrdiff_t parse_Zstring(const char **p,int *dst, ptrdiff_t len);
 int parse_range(const char **p,int *first,int *second);
 int parse_class(const char **p, struct interval **array, ptrdiff_t *size);
 void emit_string(FILE *f,const char *s,ptrdiff_t len);
