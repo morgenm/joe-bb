@@ -54,6 +54,9 @@ int *Zdup(const int *s);
 char *Ztoutf8(char *dest, const int *src);
 char *Ztoz(char *dest, const int *src);
  
+int filecmp (const char *a, const char *b);
+int fullfilecmp (const char *a, const char *b);
+
 /*
  * Functions which return minimum/maximum of two numbers  
  */
