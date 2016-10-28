@@ -1,5 +1,7 @@
 # JOE - Joe's Own Editor
 
+>For the latest, official version of this document, find it on
+>[the joe-editor Sourceforge Wiki](https://sourceforge.net/p/joe-editor/mercurial/ci/default/tree/docs/man.md)
 [TOC]
 
 ## Syntax
@@ -126,37 +128,37 @@ work, check your terminal server.  This option has no effect if UTF-8
 encoding is used.
 <br>
 
-* assume_256color<br>
+* assume\_256color<br>
 Assume ANSI-like terminal emulator supports 256 colors even if termcap entry
 says it doesn't.
 <br>
 
-* assume_color<br>
+* assume\_color<br>
 Assume ANSI-like terminal emulator supports color even if termcap entry says
 it doesn't.
 <br>
 
-* text_color __color__<br>
+* text\_color __color__<br>
 Set color for text.
 <br>
 
-* status_color __color__<br>
+* status\_color __color__<br>
 Set color for status bar.
 <br>
 
-* help_color __color__<br>
+* help\_color __color__<br>
 Set color for help.
 <br>
 
-* menu_color __color__<br>
+* menu\_color __color__<br>
 Set color for menus.
 <br>
 
-* prompt_color __color__<br>
+* prompt\_color __color__<br>
 Set color for prompts.
 <br>
 
-* msg_color __color__<br>
+* msg\_color __color__<br>
 Set color for messages.
 <br>
 
@@ -185,12 +187,12 @@ Enable beeps when edit commands return errors, for example when the cursor
 goes past extremes.
 <br>
 
-* break_links<br>
+* break\_links<br>
 When enabled, JOE first deletes the file before
 writing it in order to break hard-links and symbolic-links.
 <br>
 
-* break_hardlinks<br>
+* break\_hardlinks<br>
 When enabled, and the file is
 not a symbolic links, JOE first deletes the file before
 writing it in order to break hard-links.
@@ -228,24 +230,24 @@ When set, mouse clicks can position the cursor
 beyond the ends of lines.
 <br>
 
-* guess_crlf<br>
+* guess\_crlf<br>
 When set, JOE tries to guess the file format
 MS-DOS or UNIX.
 <br>
 
-* guess_indent<br>
+* guess\_indent<br>
 When set, JOE tries to guess the indentation character and indentation
 step based on the contents of the file.  The algorithm is to find the
 greatest common factor of the three most common indentations found in the
 file.
 <br>
 
-* guess_non_utf8<br>
+* guess\_non\_utf8<br>
 When set, enable guessing of non-UTF-8 files
 in UTF-8 locales.
 <br>
 
-* guess_utf8<br>
+* guess\_utf8<br>
 When set, enable guessing of UTF-8 files in
 non-UTF-8 locales.
 <br>
@@ -260,7 +262,7 @@ UTF-16 during save.
 When set, start off with the on-line help enabled.
 <br>
 
-* help_is_utf8<br>
+* help\_is\_utf8<br>
 When set, the help text in the joerc file is
 assumed to be UTF-8.
 <br>
@@ -269,7 +271,7 @@ assumed to be UTF-8.
 Search is case insensitive by default when set.
 <br>
 
-* joe_state<br>
+* joe\_state<br>
 Enable reading and writing of ~/.joe_state file
 <br>
 
@@ -302,16 +304,16 @@ ioctl.
 Enable marking mode: highlights between __^K B__ and cursor.
 <br>
 
-* menu_above<br>
+* menu\_above<br>
 Put menus above prompt instead of below them.
 <br>
 
-* menu_explorer<br>
+* menu\_explorer<br>
 Stay in menu when a directory is selected (otherwise the directory is added
 to the path and the cursor jumps back to the prompt).
 <br>
 
-* menu_jump<br>
+* menu\_jump<br>
 Jump into the file selection menu when __Tab__ __Tab__ is hit.
 <br>
 
@@ -421,7 +423,7 @@ files.
 Swap left and right mouse buttons.
 <br>
 
-* search_prompting<br>
+* search\_prompting<br>
 Show previous search string in search command (like in PICO).
 <br>
 
@@ -474,7 +476,7 @@ Enable auto-indent mode.  When you hit __Enter__ on an indented line, the
 indentation is duplicated onto the new line.
 <br>
 
-* c_comment<br>
+* c\_comment<br>
 Enable __^G__ skipping of C-style comments /* ... */
 <br>
 
@@ -487,7 +489,7 @@ Sets list of characters which begin lines which are definitely not part of
 paragraphs.
 <br>
 
-* cpp_comment<br>
+* cpp\_comment<br>
 Enable __^G__ skipping of C++-style comments // ...
 <br>
 
@@ -522,7 +524,7 @@ Enable hex-dump mode.
 Enable syntax highlighting.
 <br>
 
-* highlighter_context<br>
+* highlighter\_context<br>
 Enable use of syntax file to identify comments and strings which should be
 skipped over during __^G__ matching.
 <br>
@@ -562,7 +564,7 @@ inserting before them.
 Enable "picture" mode- allows cursor to go past ends of lines.
 <br>
 
-* pound_comment<br>
+* pound\_comment<br>
 __^G__ ignores # ... comments.
 <br>
 
@@ -585,11 +587,11 @@ Set right margin.
 Define right-side status bar message.
 <br>
 
-* semi_comment<br>
+* semi\_comment<br>
 __^G__ ignores ; ... comments.
 <br>
 
-* single_quoted<br>
+* single\_quoted<br>
 __^G__ ignores '...'
 <br>
 
@@ -619,13 +621,13 @@ Set syntax for syntax highlighting.
 Set tab stop width.
 <br>
 
-* text_delimiters __word delimiter list__<br>
+* text\_delimiters __word delimiter list__<br>
 Give list of word delimiters which __^G__ will step through.
 
 For example, "begin=end:if=elif=else=endif" means that __^G__ will jump
 between the matching if, elif, else and endif.
 
-* vhdl_comment<br>
+* vhdl\_comment<br>
 __^G__ ignores -- ... comments
 <br>
 
@@ -659,7 +661,7 @@ bold+bg_green+blue
 
 * Foreground colors: white, cyan, magenta, blue, yellow, green, red, or black
 
-* Background colors: bg_white, bg_cyan, bg_magenta, bg_blue, bg_yellow, bg_green, bg_red or bg_black
+* Background colors: bg\_white, bg_cyan, bg\_magenta, bg\_blue, bg\_yellow, bg\_green, bg\_red or bg\_black
 
 With a 16 color or 256 color terminal emulator (export TERM=xterm-16color), these
 brighter than normal colors become available:
@@ -669,16 +671,16 @@ brighter than normal colors become available:
 
 * Foreground: WHITE, CYAN, MAGENTA, BLUE, YELLOW, GREEN, RED or BLACK
 
-* Background: bg_WHITE, bg_CYAN, bg_MAGENTA, bg_BLUE, bg_YELLOW, bg_GREEN, bg_RED or bg_BLACK
+* Background: bg\_WHITE, bg\_CYAN, bg\_MAGENTA, bg\_BLUE, bg\_YELLOW, bg\_GREEN, bg\_RED or bg\_BLACK
 
 With a 256 color terminal emulator (export TERM=xterm-256color), these become available:
 
 > Note that you need an xterm which was compiled to support 256 colors and a
 > matching termcap/terminfo entry for it.
 
-* fg_RGB and bg_RGB, where R, G and B rand from 0 - 5.  So: fg_500 is bright red.
+* fg\_RGB and bg\_RGB, where R, G and B rand from 0 - 5.  So: fg\_500 is bright red.
 
-* fg_NN and bg_NN give shades of grey, where the intensity, NN, ranges from 0 - 23.
+* fg\_NN and bg\_NN give shades of grey, where the intensity, NN, ranges from 0 - 23.
 
 ### Status line definition strings
 
@@ -834,19 +836,19 @@ R__ to insert it.
 Wherever JOE expects you to enter a file name, whether on the command line
 or in prompts within the editor, you may also type:
 
-* !command
+    !command
 
 To read or write data to or from a shell command.  For example,
 use __joe '!ls'__ to get a copy of your directory listing to edit or from
 within the editor use __^K D !mail jhallen@world.std.com__ to send the
 file being edited to me.
 
-* &gt;&gt;filename
+    >>filename
 
 Use this to have JOE append the edited text to the end of the file 
 "filename."
 
-* filename,START,SIZE
+    filename,START,SIZE
 
 Use this to access a fixed section of a file or device.  __START__ and
 __SIZE__ may be entered in decimal (ex.: 123) octal (ex.: 0777) or
@@ -1013,16 +1015,16 @@ between the two.  Currently, one of the two must be UTF-8 for translation to
 work.
 
 The character set for the terminal and the default character set assumed for
-files is determined by the 'LC_ALL' environment variable (and if that's not
+files is determined by the 'LC\_ALL' environment variable (and if that's not
 set, LC_CTYPE and LANG are also checked).
 
-For example, if LC_ALL is set to:
+For example, if LC\_ALL is set to:
 
 	de_DE
 
 Then the character set will be ISO-8859-1.
 
-If LC_ALL is set to:
+If LC\_ALL is set to:
 
 	de_DE.UTF-8
 
@@ -1257,9 +1259,8 @@ __\^test\$__, then JOE with find __test__ on a line by itself.
 
 * __\< \\\>__<br>
 
-These match the beginnings and endings of words.  For example, if you give
-__\<is\\\>__, then JOE will find the word "is" but will not find the "is" in
-"this".
+These match the beginnings and endings of words.  For example, if you give `\<is\>`
+then JOE will find the word "is" but will not find the "is" in "this".
 
 * __\\\[...]__<br>
 
@@ -1733,10 +1734,10 @@ have their usual effects. Hit __^K ]__ to stop recording the macro.  Hit
 __^K__ followed by the number you recorded the macro in to execute one 
 iteration of the key-strokes.   
 
-For example, if you want to put "**" in front of a number of lines, you can 
+For example, if you want to put "\*\*" in front of a number of lines, you can 
 type:
 
-__^K \[ 0 ^A \*\* __<down arrow\> __^K ]__
+__^K \[ 0 ^A \*\* &lt;__down arrow__&gt; ^K ]__
 
 Which starts the macro recording, moves the cursor to the beginning of the 
 line, inserts "\*\*", moves the cursor down one line, and then ends the 
@@ -2241,7 +2242,7 @@ If you need to pass a key to the shell that JOE normally uses, quote it.  For
 example, if you invoke "emacs -nw" in the shell window, you can exit it with:
 
 	^Q ^X ^C
-
+	
 To quickly position the cursor back to the point where data is entered into
 the shell, hit __^K V__.
 
@@ -2321,21 +2322,16 @@ Pop-up shell windows have a number of nice use cases:
 	Hit F1 and navigate to a directory.  Use grep or find (or both)
 	to generate a list of files):
 
-~~~~
-		parse grep -n FIXME *.c
-~~~~
+        parse grep -n FIXME *.c
+
 
 Or:
 
-~~~~
-		markb; find . | xargs grep -n FIXME; markk; parse
-~~~~
+        markb; find . | xargs grep -n FIXME; markk; parse
 
 (Note that you can't say this:
 
-~~~~
-		parse find . | xargs grep -n FIXME
-~~~~
+        parse find . | xargs grep -n FIXME
 
 ...the issue is that only the words to the left of the pipe symbol
 are passed as arguments to the parse command).
@@ -2349,20 +2345,16 @@ you can use __Esc -__ and __Esc =__ to step through the list).
 	Once JOE has a list of files (from above), use search and replace
 	with the 'e' option to visit all of them:
 
-~~~~
-		^K F
-		   Find: <text>
-		   Options: re
-		   Replace: <replacement text>
-~~~~
+        ^K F
+           Find: <text>
+           Options: re
+           Replace: <replacement text>
 
 * Build your project
 
 Easily capture errors from a build with:
 
-~~~~
-		parserr make
-~~~~
+        parserr make
 
 Hit __Esc =__ and __Esc -__ to step through the errors.
 
@@ -2579,8 +2571,8 @@ sometimes have to make dummy states with
 
 just to get a color specification.
 
-Delimiter match buffer is for perl and shell: a regex in perl can be s<..>(...)
-and in shell you can say: <<EOS ....... EOS.  The idea is that you capture
+Delimiter match buffer is for perl and shell: a regex in perl can be s&lt;..&gt;(...)
+and in shell you can say: &lt;&lt;EOS ....... EOS.  The idea is that you capture
 the first delimiter into the match buffer (the &lt; or first "EOS") and then
 match it to the second one with "&" in a string or character list.
 
@@ -2814,7 +2806,7 @@ When -joexterm is set (and you have ./configured Xterm with
 left-click-drag is available for pasting into other X windows (even if the
 selected text is larger than the text window).  Text selected in other X
 windows can be pasted into JOE with middle-click.  There are no problems
-pasting text containing ` or with auto-indent.
+pasting text containing \` or with auto-indent.
 
 --enable-paste64 allows an application program to communicate Base-64
 encoded selection data to and from the Xterm.  The program has full control
@@ -2933,18 +2925,18 @@ Gives terminal type: JOE will use this instead of TERM if it's set.
 <br>
 
 * LANG<br>
-Sets locale (like en_US.utf-8).  JOE uses
-the first of these which is set: LC_ALL, LC_CTYPE, LANG.
+Sets locale (like en\_US.utf-8).  JOE uses
+the first of these which is set: LC\_ALL, LC\_CTYPE, LANG.
 <br>
 
-* LC_ALL<br>
-Sets locale (like en_US.utf-8).  JOE
-uses the first of these which is set: LC_ALL, LC_CTYPE, LANG.
+* LC\_ALL<br>
+Sets locale (like en\_US.utf-8).  JOE
+uses the first of these which is set: LC\_ALL, LC\_CTYPE, LANG.
 <br>
 
-* LC_CTYPE<br>
-Sets locale (like en_US.utf-8).  JOE
-uses the first of these which is set: LC_ALL, LC_CTYPE, LANG.
+* LC\_CTYPE<br>
+Sets locale (like en\_US.utf-8).  JOE
+uses the first of these which is set: LC\_ALL, LC\_CTYPE, LANG.
 <br>
 
 * LINES<br>
@@ -2966,7 +2958,7 @@ windows.  If SHELL is not set (Cygwin) or if it's set to /bin/sh, JOE
 invokes the first of these which exists: /bin/bash, /usr/bin/bash, /bin/sh.
 <br>
 
-* SIMPLE_BACKUP_SUFFIX<br>
+* SIMPLE\_BACKUP\_SUFFIX<br>
 If this is set, it is
 appended to the file name instead of ~ to create the backup file name.
 <br>
@@ -3661,15 +3653,15 @@ Start running cmds again
 
 <p>Here is an example 'if' macro:</p>
 
-<p>if,"char==65",then,"it's an A",else,"it's not an A",endif	__^[ q__</p>
+    if,"char==65",then,"it's an A",else,"it's not an A",endif	^[ q
 
-<p>When you hit __^[ q__, if the character under the cursor is an 'A': "it's a A"
-is inserted into the buffer, otherwise "it's not an A" is inserted.</p>
+When you hit __^[ q__, if the character under the cursor is an 'A': "it's a A"
+is inserted into the buffer, otherwise "it's not an A" is inserted.
 
 <p>"if" creates a math prompt (like __Esc M__).  "then" is like "rtn"- it hits the
-return key for this prompt.</p>
+return key for this prompt.
 
-<p>Within the math prompt, the following variables are available:</p>
+Within the math prompt, the following variables are available:
 
 * char<br>
 ASCII value of character under cursor

@@ -25,3 +25,11 @@ missing$
 
 __pycache__$
 \.pyc$
+
+windows/bin
+windows/src/bin
+windows/tools/sync/repos
+\.log$
+\.suo$
+\.sdf$
+\.opensdf$

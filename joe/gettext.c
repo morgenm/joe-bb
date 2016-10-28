@@ -63,7 +63,7 @@ const char *my_gettext(const char *s)
 	return s;
 }
 
-static int load_po(FILE *f)
+static int load_po(JFILE *f)
 {
 	char *buf = 0;
 	char *msgid = vsdupz("");
@@ -71,7 +71,7 @@ static int load_po(FILE *f)
 	struct charmap *po_map = locale_map;
 	int preload_flag = 0;
 
-	while (preload_flag || vsgets(isfree(&buf), f)) {
+	while (preload_flag || jfgets(isfree(&buf), f)) {
 		const char *p;
 		preload_flag = 0;
 		p = buf;
@@ -88,7 +88,7 @@ static int load_po(FILE *f)
 				ofst += len;
 				parse_ws(&p, '#');
 				if (!*p) {
-					if (vsgets(&buf, f)) {
+					if (jfgets(&buf,f)) {
 						p = buf;
 						preload_flag = 1;
 						parse_ws(&p, '#');
@@ -109,7 +109,7 @@ static int load_po(FILE *f)
 				ofst += len;
 				parse_ws(&p, '#');
 				if (!*p) {
-					if (vsgets(&buf, f)) {
+					if (jfgets(&buf,f)) {
 						p = buf;
 						preload_flag = 1;
 						parse_ws(&p, '#');
@@ -144,28 +144,45 @@ static int load_po(FILE *f)
 		}
 	}
 	bye:
-	fclose(f);
+	jfclose(f);
 	obj_free(msgid);
 	return 0;
 }
 
 /* Initialize my_gettext().  Call after locale_map has been set. */
 
+static JFILE *find_po(const char *s)
+{
+	char *buf = NULL;
+	JFILE *f = NULL;
+
+	buf = vsfmt(buf, 0, "%slang/%s.po", JOEDATA, s);
+	if ((f = jfopen(buf, "r"))) goto found;
+
+	if (s[0] && s[1]) {
+		buf = vsfmt(buf, 0, "%slang/%c%c.po", JOEDATA, s[0], s[1]);
+		if ((f = jfopen(buf, "r"))) goto found;
+	}
+
+	buf = vsfmt(buf, 0, "*%s.po", s);
+	if ((f = jfopen(buf, "r"))) goto found;
+
+	if (s[0] && s[1]) {
+		buf = vsfmt(buf, 0, "*%c%c.po", s[0], s[1]);
+		if ((f = jfopen(buf, "r"))) goto found;
+	}
+
+found:
+	obj_free(buf);
+	return f;
+}
+
 void init_gettext(const char *s)
 {
-	FILE *f;
-	char *buf = vsfmt(NULL,0, "%slang/%s.po",JOEDATA,s);
-	if ((f = fopen(buf, "r"))) {
-		/* Try specific language, like en_GB */
+	JFILE *f = find_po(s);
+
+	if (f) {
 		gettext_ht = htmk(256);
 		load_po(f);
-	} else if (s[0] && s[1]) {
-		/* Try generic language, like en */
-		char *bf = vsfmt(NULL,0,"%slang/%c%c.po",JOEDATA,s[0],s[1]);
-		if ((f = fopen(bf, "r"))) {
-			gettext_ht = htmk(256);
-			load_po(f);
-		}
 	}
-	obj_free(buf);
 }
