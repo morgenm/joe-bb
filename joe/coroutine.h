@@ -8,7 +8,9 @@
 
 /* A stack */
 
-#define STACK_SIZE (sizeof(void *) * 32768)
+#define STACK_SIZE 32768 /* libcoro multiplies this by sizeof(void*) for us */
+
+#include "libcoro.h"
 
 struct stack {
 	struct stack *next;			/* Next free stack */
@@ -21,12 +23,7 @@ struct stack {
 	va_list args;
 
 	/* initial PC, SP to use for call to func */
-#ifdef USE_UCONTEXT
-	ucontext_t uc[1];
-#else
-	jmp_buf go;
-	char *stk;
-#endif
+	coro_context cothread;
 };
 
 /* A suspended co-routine */
@@ -36,12 +33,6 @@ struct coroutine {
 	Obj saved_obj_stack;		/* To restore obj stack */
 	int override;			/* To use override_val instead of normal return value */
 	int override_val;
-	/* To restore PC, SP, regs... */
-#ifdef USE_UCONTEXT
-	ucontext_t uc[1];
-#else
-	jmp_buf cont;
-#endif
 };
 
 /* Call a function as a co-routine (it runs with its own stack).  co_call
