@@ -66,7 +66,7 @@ void load_hist(FILE *f,B **bp)
 
 /* Save state */
 
-#define STATE_ID "# JOE state file v1.0\n"
+#define STATE_ID "# JOE state file v1.0"
 
 void save_state()
 {
@@ -80,7 +80,12 @@ void save_state()
 	if (!home)
 		return;
 	
-	path = vsfmt(NULL,0,"%s/.joe_state",path);
+#ifndef JOEWIN
+	path = vsfmt(NULL, 0, "%s/.joe_state", home);
+#else
+	/* Don't use dot-files in Windows */
+	path = vsfmt(NULL, 0, "%s\\joe_state", home);
+#endif
 	old_mask = umask(0066);
 	f = fopen(path, "w");
 	umask(old_mask);
@@ -117,7 +122,12 @@ void load_state()
 		return;
 	if (!path)
 		return;
+#ifndef JOEWIN
 	path = vsfmt(NULL, 0, "%s/.joe_state", path);
+#else
+	/* Don't use dotfiles in Windows */
+	path = vsfmt(NULL, 0, "%s\\joe_state", path);
+#endif
 	f = fopen(path, "r");
 	if(!f)
 		return;
