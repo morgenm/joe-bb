@@ -2071,6 +2071,51 @@ int meta_color(const char *s)
 	return code;
 }
 
+/* Calculate number of lines needed for a given prompt string and a given window width.
+   Also this finds the nth line and returns the position of the substring which is
+   that line. Set n to -1 if you just want the height. */
+
+int break_height(struct charmap *map,const char **src,ptrdiff_t *src_len,int wid,int n)
+{
+	const char *s = *src;
+	int len = *src_len;
+	int h = 1; /* Number of lines */
+	int col = 0; /* Current column */
+	int x = 0; /* Offset into string */
+	int start_of_line = 0; /* Start of most recent line */
+	while (x != len) {
+		int space = 0;
+		int word = 0;
+		int start = x;
+		int start_word;
+		while (x != len && s[x] == ' ') {
+			++space;
+			++x;
+		}
+		start_word = x;
+		while (x != len && s[x] != ' ') {
+			++x;
+		}
+		word = txtwidth(map, s + start_word, x - start_word);
+		if (col + space + word < wid || !col) {
+			/* Leading space and word fit on current line */
+			col += space + word;
+		} else {
+			/* They don't fit, start a new line */
+			if (!n--) {
+				x = start;
+				break;
+			}
+			++h;
+			col = word;
+			start_of_line = start_word;
+		}
+	}
+	*src = s + start_of_line;
+	*src_len = x - start_of_line;
+	return h;
+}
+
 /* Generate a field
  *
  * 't' is SCRN to write to.
@@ -2156,9 +2201,9 @@ void genfield(SCRN *t,int (*scrn)[COMPOSE],int *attr,ptrdiff_t x,ptrdiff_t y,ptr
 
 /* Width function for above */
 
-ptrdiff_t txtwidth(const char *s,ptrdiff_t len)
+ptrdiff_t txtwidth(struct charmap *map, const char *s,ptrdiff_t len)
 {
-	if (locale_map->type) {
+	if (map->type) {
 		ptrdiff_t col=0;
 		struct utf8_sm sm;
 		utf8_init(&sm);
@@ -2202,6 +2247,30 @@ off_t txtwidth1(struct charmap *map,off_t tabwidth,const char *s,ptrdiff_t len)
 		}
 		return col;
 	}
+}
+
+/* Unescape for text going to genfmt */
+
+void unesc_genfmt(char *d, char *s, int len, int max)
+{
+	while (max > 0 && len) {
+		if (!*s) {
+			*d++ = '\\';
+			*d++ = '@';
+			++s;
+		} else {
+			if (*s == '\\') {
+				*d++ = '\\';
+				--max;
+			}
+			*d++ = *s++;
+		}
+		--len;
+		--max;
+	}
+	if (len)
+		*d++ = '$';
+	*d = 0;
 }
 
 /* Generate text with formatting escape sequences */

@@ -34,7 +34,6 @@ static void clrcomp(SRCH *srch)
 
 void setpat(SRCH *srch, char *s)
 {
-	vsrm(srch->pattern);
 	srch->pattern = s;
 	clrcomp(srch);
 }
@@ -95,11 +94,14 @@ static char **get_word_list(B *b,off_t ignore)
 	} while (c != NO_MORE_DATA);
 	prm(p);
 
+	list = vatrunc(list, 0);
+	vaperm(list);
+
 	for (idx = 0;idx != h->len;++idx)
 		for (t = h->tab[idx];t;t=t->next)
 			list = vaadd(list, (char *)t->val);
 	if (list)
-		vasort(list,sLEN(list));	
+		vasort(av(list));	
 
 	htrm(h);
 
@@ -130,7 +132,7 @@ static void fcmplt_ins(BW *bw, char *line)
 		/* Insert single match */
 		bdel(p,bw->cursor);
 		binsm(bw->cursor,sv(line));
-		pfwrd(bw->cursor,sLEN(line));
+		pfwrd(bw->cursor,vslen(line));
 		bw->cursor->xcol = piscol(bw->cursor);
 		prm(p);
 	} else {
@@ -145,16 +147,13 @@ static int fcmplt_abrt(W *w, ptrdiff_t x, void *obj)
 	WIND_BW(bw, w);
 	if (line) {
 		fcmplt_ins(bw, line);
-		vsrm(line);
 	}
 	return -1;
 }
 
 static int fcmplt_rtn(MENU *m, ptrdiff_t x, void *obj, int k)
 {
-	char *line = (char *)obj;
 	fcmplt_ins((BW *)m->parent->win->object, m->list[x]);
-	vsrm(line);
 	m->object = NULL;
 	wabort(m->parent);
 	return 0;
@@ -189,7 +188,8 @@ int ufinish(W *w, int k)
 		pgetc(p);
 
 	if (bw->cursor->byte!=p->byte && bw->cursor->byte-p->byte<64) {
-		line = brvs(p, bw->cursor->byte - p->byte); /* CVT: Risky- we assume the match fits in memory */
+		line = brvs(NULL, p, bw->cursor->byte - p->byte); /* CVT: Risky- we assume the match fits in memory */
+		obj_perm(line);
 
 		/* We have a word */
 
@@ -200,39 +200,37 @@ int ufinish(W *w, int k)
 		word_list = get_word_list(bw->b, p->byte);
 
 		if (!word_list) {
-			vsrm(line);
 			prm(p);
 			return -1;
 		}
 
 		line1 = vsncpy(NULL,0,sv(line));
 		line1 = vsadd(line1,'*');
-		lst = regsub(word_list, aLEN(word_list), line1);
-		vsrm(line1);
+		lst = regsub(av(word_list), line1);
 
 		if (!lst) {
 			ttputc(7);
-			vsrm(line);
 			return -1;
 		}
+		vaperm(lst);
 
-		m = mkmenu(bw->parent, bw->parent, lst, fcmplt_rtn, fcmplt_abrt, NULL, 0, line, NULL);
+		m = mkmenu(bw->parent, bw->parent, lst, fcmplt_rtn, fcmplt_abrt, NULL, 0, line);
 		if (!m) {
 			varm(lst);
-			vsrm(line);
 			return -1;
 		}
 
 		/* Possible match list is now in lst */
 
-		if (aLEN(lst) == 1)
+		if (valen(lst) == 1)
 			return fcmplt_rtn(m, 0, line, 0);
 		else if (smode)
 			return 0;
 		else {
 			char *com = mcomplete(m);
-			vsrm((char *)m->object);
+			obj_free(m->object);
 			m->object = com;
+			obj_perm(com);
 			wabort(m->parent);
 			smode = 2;
 			ttputc(7);
@@ -412,6 +410,9 @@ SRCH *mksrch(char *pattern, char *replacement, int ignore, int backwards, int re
 	SRCH *srch = (SRCH *) joe_malloc(SIZEOF(SRCH));
 	int x;
 
+	obj_perm(pattern);
+	obj_perm(replacement);
+
 	srch->first = NULL;
 	srch->current = NULL;
 	srch->all = all;
@@ -465,8 +466,8 @@ void rmsrch(SRCH *srch)
 		markk->xcol = piscol(markk);
 	}
 	frchn(&fsr, &srch->recs);
-	vsrm(srch->pattern);
-	vsrm(srch->replacement);
+	obj_free(srch->pattern);
+	obj_free(srch->replacement);
 	joe_free(srch);
 	updall();
 }
@@ -480,124 +481,41 @@ static P *insert(SRCH *srch, P *p, const char *s, ptrdiff_t len, B **entire, B *
 	ptrdiff_t x;
 	off_t starting = p->byte;
 	int nth;
-	int case_flag = 0;
-	B *b;
 
 	while (len) {
 		for (x = 0; x != len && s[x] != '\\'; ++x) ;
 		if (x) {
-			const char *t = s;
-			ptrdiff_t y = x;
-			switch (case_flag) {
-				case 1: {
-					case_flag = 0;
-				} case 2: {
-					while (y) {
-						int ch = fwrd_c(p->b->o.charmap, &t, &y);
-						ch = joe_tolower(p->b->o.charmap, ch);
-						binsc(p, ch);
-						pgetc(p);
-					}
-					break;
-				} case -1: {
-					case_flag = 0;
-				} case -2: {
-					while (y) {
-						int ch = fwrd_c(p->b->o.charmap, &t, &y);
-						ch = joe_toupper(p->b->o.charmap, ch);
-						binsc(p, ch);
-						pgetc(p);
-					}
-					break;
-				}
-			}
-			if (y) {
-				binsm(p, t, y);
-				pfwrd(p, y);
-			}
+			binsm(p, s, x);
+			pfwrd(p, x);
 			len -= x;
 			s += x;
 		} else if (len >= 2) {
-			if (s[1] == 'l') {
-				case_flag = 1;
-				s += 2;
-				len -= 2;
-			} else if (s[1] == 'L') {
-				case_flag = 2;
-				s += 2;
-				len -= 2;
-			} else if (s[1] == 'u') {
-				case_flag = -1;
-				s += 2;
-				len -= 2;
-			} else if (s[1] == 'U') {
-				case_flag = -2;
-				s += 2;
-				len -= 2;
-			} else if (s[1] == 'E') {
-				case_flag = 0;
+			if ((s[1] >= 'a' && s[1] <= 'z') || (s[1] >= 'A' && s[1] <= 'Z')) {
+				nth = (s[1] & 0x1f) - 1;
+				insertit:
+				if (pieces[nth]) {
+					off_t l = pieces[nth]->eof->byte;
+					binsb(p, bcpy(pieces[nth]->bof, pieces[nth]->eof));
+					pfwrd(p, l);
+				}
 				s += 2;
 				len -= 2;
 			} else if (s[1] >= '1' && s[1] <= '9') {
 				nth = s[1] - '1';
-				s += 2;
-				len -= 2;
-				if (pieces[nth]) {
-					b = bcpy(pieces[nth]->bof, pieces[nth]->eof);
-					goto insertit;
-				}
+				goto insertit;
 			} else if (s[1] == '&') {
+				if (*entire) {
+					off_t l = entire[0]->eof->byte;
+					binsb(p, bcpy(entire[0]->bof, entire[0]->eof));
+					pfwrd(p, l);
+				}
 				s += 2;
 				len -= 2;
-				if (*entire) {
-					b = bcpy(entire[0]->bof, entire[0]->eof);
-					insertit:
-					if (case_flag) {
-						P *q = pdup(b->bof, "insert");
-						while (!piseof(q)) {
-							int ch = pgetc(q);
-							switch (case_flag) {
-								case 1: {
-									case_flag = 0;
-								} case 2: {
-									ch = joe_tolower(p->b->o.charmap, ch);
-									break;
-								} case -1: {
-									case_flag = 0;
-								} case -2: {
-									ch = joe_toupper(p->b->o.charmap, ch);
-									break;
-								}
-							}
-							binsc(p, ch);
-							pgetc(p);
-						}
-						prm(q);
-						brm(b);
-					} else {
-						off_t l = b->eof->byte;
-						binsb(p, b);
-						pfwrd(p, l);
-					}
-				}
 			} else {
 				const char *a = s + x;
 				ptrdiff_t l = len - x;
 				int ch = escape(p->b->o.charmap->type, &a, &l, NULL);
 				if (ch != -256) {
-					switch (case_flag) {
-						case 1: {
-							case_flag = 0;
-						} case 2: {
-							ch = joe_tolower(p->b->o.charmap, ch);
-							break;
-						} case -1: {
-							case_flag = 0;
-						} case -2: {
-							ch = joe_toupper(p->b->o.charmap, ch);
-							break;
-						}
-					}
 					binsc(p, ch);
 					pgetc(p);
 				}
@@ -622,14 +540,6 @@ static P *insert(SRCH *srch, P *p, const char *s, ptrdiff_t len, B **entire, B *
 char srchstr[] = "Search";	/* Context sensitive help identifier */
 char replstr[] = "Replace";	/* Context sensitive help identifier */
 char srchopt[] = "SearchOptions";
-
-static int pfabort(W *w, void *obj)
-{
-	SRCH *srch = (SRCH *)obj;
-	if (srch)
-		rmsrch(srch);
-	return -1;
-}
 
 static int pfsave(W *w, void *obj)
 {
@@ -662,23 +572,6 @@ static int pfsave(W *w, void *obj)
 	return -1;
 }
 
-static int set_replace(W *w, char *s, void *obj, int *notify)
-{
-	SRCH *srch = (SRCH *)obj;
-	BW *bw;
-	WIND_BW(bw, w);
-	
-	if (sLEN(s) || !globalsrch || !pico)
-		srch->replacement = s;
-	else {
-		/* Use previous string: this prevents replace with empty string */
-		/* vsrm(s);
-		srch->replacement = vsdup(globalsrch->replacement); */
-		srch->replacement = s;
-	}
-	return dopfnext(bw, setmark(srch), notify);
-}
-
 /* Option characters */
 
 const char *all_key = _("|all files|aA");
@@ -694,145 +587,14 @@ const char *regex_key = _("|regex|xX");
 const char *noregex_key = _("|no regex|yY");
 const char *regex_debug_key = _("|regex_debug|v");
 
-static int set_options(W *w, char *s, void *obj, int *notify)
-{
-	SRCH *srch = (SRCH *)obj;
-	BW *bw;
-	char buf[80];
-	const char *t;
-	WIND_BW(bw, w);
-	srch->ignore = opt_icase;
-
-	t = s;
-	while (*t) {
-		int c = fwrd_c(locale_map, &t, NULL);
-		if (yncheck(all_key, c))
-			srch->all = 1;
-		else if (yncheck(list_key, c))
-			srch->all = 2;
-		else if (yncheck(replace_key, c))
-			srch->replace = 1;
-		else if (yncheck(backwards_key, c))
-			srch->backwards = 1;
-		else if (yncheck(ignore_key, c))
-			srch->ignore = 1;
-		else if (yncheck(noignore_key, c))
-			srch->ignore = 0;
-		else if (yncheck(wrap_key, c))
-			srch->allow_wrap = 1;
-		else if (yncheck(nowrap_key, c))
-			srch->allow_wrap = 0;
-		else if (yncheck(block_key, c))
-			srch->block_restrict = 1;
-		else if (yncheck(regex_key, c))
-			srch->regex = 1;
-		else if (yncheck(regex_debug_key, c))
-			srch->debug = 1;
-		else if (yncheck(noregex_key, c))
-			srch->regex = 0;
-		else if (c >= '0' && c <= '9') {
-			if (srch->repeat == -1)
-				srch->repeat = 0;
-			srch->repeat = srch->repeat * 10 + c - '0';
-		}
-	}	
-	vsrm(s);
-	if (srch->replace) {
-		/* if (pico && globalsrch && globalsrch->replacement) {
-			joe_snprintf_1(bf1,30,"%s",globalsrch->replacement);
-			if (zlen(globalsrch->replacement)>29)
-				zlcat(bf1, SIZEOF(bf1), "$");
-			joe_snprintf_1(buf,SIZEOF(buf),joe_gettext(_("Replace with (%{help} for help) [%s]: ")),bf1);
-		} else */
-			joe_snprintf_0(buf, SIZEOF(buf), joe_gettext(_("Replace with (%{help} for help): ")));
-		if (wmkpw(bw->parent, buf, &replhist, set_replace, replstr, pfabort, srch_cmplt, srch, notify, bw->b->o.charmap, 0))
-			return 0;
-		else
-			return -1;
-	} else
-		return dopfnext(bw, setmark(srch), notify);
-}
-
-static int set_pattern(W *w, char *s, void *obj, int *notify)
-{
-	SRCH *srch = (SRCH *)obj;
-	BW *bw;
-	BW *pbw;
-	const char *p;
-	WIND_BW(bw, w);
-	if (opt_icase)
-		p = joe_gettext(_("case (S)ensitive (R)eplace (B)ackwards Bloc(K) (%{help} for help): "));
-	else
-		p = joe_gettext(_("(I)gnore (R)eplace (B)ackwards Bloc(K) (%{help} for help): "));
-
-	if (sLEN(s) || !globalsrch || !pico) {
-		setpat(srch, s);
-	} else {
-		vsrm(s);
-		setpat(srch, vsdup(globalsrch->pattern));
-	}
-	if ((pbw = wmkpw(bw->parent, p, NULL, set_options, srchopt, pfabort, utypebw, srch, notify, locale_map, 0)) != NULL) {
-		char buf[10];
-
-		if (srch->ignore) {
-			const char *t = joe_gettext(ignore_key);
-			binsc(pbw->cursor, fwrd_c(locale_map, &t, NULL));
-		}
-		if (srch->replace) {
-			const char *t = joe_gettext(replace_key);
-			binsc(pbw->cursor, fwrd_c(locale_map, &t, NULL));
-		}
-		if (srch->backwards) {
-			const char *t = joe_gettext(backwards_key);
-			binsc(pbw->cursor, fwrd_c(locale_map, &t, NULL));
-		}
-		if (srch->repeat >= 0)
-			joe_snprintf_1(buf, SIZEOF(buf), "%d", srch->repeat), binss(pbw->cursor, buf);
-		pset(pbw->cursor, pbw->b->eof);
-		pbw->cursor->xcol = piscol(pbw->cursor);
-		srch->ignore = 0;
-		srch->replace = 0;
-		srch->backwards = 0;
-		srch->repeat = -1;
-		return 0;
-	} else {
-		rmsrch(srch);
-		return -1;
-	}
-}
-
-/* Unescape for text going to genfmt */
-
-static void unesc_genfmt(char *d, char *s, ptrdiff_t len,ptrdiff_t max)
-{
-	while (max > 0 && len) {
-		if (!*s) {
-			*d++ = '\\';
-			*d++ = '@';
-			++s;
-		} else {
-			if (*s == '\\') {
-				*d++ = '\\';
-				--max;
-			}
-			*d++ = *s++;
-		}
-		--len;
-		--max;
-	}
-	if (len)
-		*d++ = '$';
-	*d = 0;
-}
-
 int std_regex = 0; /* Standard regex format by default */
 
 int dofirst(BW *bw, int back, int repl, char *hint)
 {
 	SRCH *srch;
-	BW *pbw;
-	char bf1[80];
-	char buf[80];
+	char bf1[32];
+	char *s = 0;
+	char *prompt = 0;
 
 	if (smode && globalsrch) {
 		globalsrch->backwards = back;
@@ -854,17 +616,126 @@ int dofirst(BW *bw, int back, int repl, char *hint)
 	srch->wrap_p = pdup(bw->cursor, "dofirst");
 	srch->wrap_p->owner = &srch->wrap_p;
 	if (pico && globalsrch && globalsrch->pattern) {
-		unesc_genfmt(bf1, sv(globalsrch->pattern), 30);
-		joe_snprintf_1(buf,SIZEOF(buf),joe_gettext(_("Find (%{help} for help) [%s]: ")),bf1);
+		unesc_genfmt(bf1, sv(globalsrch->pattern), sizeof(bf1)-2);
+		prompt = vsfmt(prompt, 0, joe_gettext(_("Find (%{help} for help) [%s]: ")),bf1);
 	} else
-		joe_snprintf_0(buf, SIZEOF(buf), joe_gettext(_("Find (%{help} for help): ")));
-	if ((pbw=wmkpw(bw->parent, buf, &findhist, set_pattern, srchstr, pfabort, srch_cmplt, srch, NULL, bw->b->o.charmap, 0))) {
-		if (hint) {
-			binss(pbw->cursor, hint);
-			pset(pbw->cursor, pbw->b->eof);
-			pbw->cursor->xcol = piscol(pbw->cursor);
+		prompt = vsdupz(joe_gettext(_("Find (%{help} for help): ")));
+
+	s = ask(bw->parent, prompt, &findhist, srchstr, srch_cmplt, bw->b->o.charmap, 0, 0, hint);
+
+	if (s) {
+		const char *p;
+		char buf[80];
+		char *bufp;
+		if (opt_icase)
+			p = joe_gettext(_("case (S)ensitive (R)eplace (B)ackwards Bloc(K) (%{help} for help): "));
+		else
+			p = joe_gettext(_("(I)gnore (R)eplace (B)ackwards Bloc(K) (%{help} for help): "));
+
+		obj_free(srch->pattern);
+		if (vslen(s) || !globalsrch || !pico) {
+			srch->pattern = s;
+			obj_perm(s);
+		} else {
+			srch->pattern = vsdup(globalsrch->pattern);
+			obj_perm(srch->pattern);
 		}
-		return 0;
+
+		bufp = buf;
+		if (srch->ignore) {
+			const char *t = joe_gettext(ignore_key);
+			copy_c(&bufp, &t);
+		}
+		if (srch->replace) {
+			const char *t = joe_gettext(replace_key);
+			copy_c(&bufp, &t);
+		}
+		if (srch->backwards) {
+			const char *t = joe_gettext(backwards_key);
+			copy_c(&bufp, &t);
+		}
+		if (srch->repeat >= 0) {
+			joe_snprintf_1(bufp, SIZEOF(buf) - (bufp - buf), "%d", srch->repeat);
+			bufp += zlen(bufp);
+		}
+		srch->ignore = 0;
+		srch->replace = 0;
+		srch->backwards = 0;
+		srch->repeat = -1;
+
+		*bufp = 0;
+
+		s = ask(bw->parent, p, NULL, srchopt, utypebw, locale_map, 0, 0, buf);
+
+		if (s) {
+			const char *t;
+
+			srch->ignore = opt_icase;
+
+			t = s;
+			while (*t) {
+				int c = fwrd_c(locale_map, &t, NULL);
+				if (yncheck(all_key, c))
+					srch->all = 1;
+				else if (yncheck(list_key, c))
+					srch->all = 2;
+				else if (yncheck(replace_key, c))
+					srch->replace = 1;
+				else if (yncheck(backwards_key, c))
+					srch->backwards = 1;
+				else if (yncheck(ignore_key, c))
+					srch->ignore = 1;
+				else if (yncheck(noignore_key, c))
+					srch->ignore = 0;
+				else if (yncheck(wrap_key, c))
+					srch->allow_wrap = 1;
+				else if (yncheck(nowrap_key, c))
+					srch->allow_wrap = 0;
+				else if (yncheck(block_key, c))
+					srch->block_restrict = 1;
+				else if (yncheck(regex_key, c))
+					srch->regex = 1;
+				else if (yncheck(regex_debug_key, c))
+					srch->debug = 1;
+				else if (yncheck(noregex_key, c))
+					srch->regex = 0;
+				else if (c >= '0' && c <= '9') {
+					if (srch->repeat == -1)
+						srch->repeat = 0;
+					srch->repeat = srch->repeat * 10 + c - '0';
+				}
+			}	
+			if (srch->replace) {
+				/* if (pico && globalsrch && globalsrch->replacement) {
+					joe_snprintf_1(bf1,30,"%s",globalsrch->replacement);
+					if (zlen(globalsrch->replacement)>29)
+						zlcat(bf1, SIZEOF(bf1), "$");
+					joe_snprintf_1(buf,SIZEOF(buf),joe_gettext(_("Replace with (%{help} for help) [%s]: ")),bf1);
+				} else
+					zcpy(buf, joe_gettext(_("Replace with (%{help} for help): "))); */
+
+				s = ask(bw->parent, joe_gettext(_("Replace with (%{help} for help): ")), &replhist, replstr, srch_cmplt, bw->b->o.charmap, 0, 0, NULL);
+				if (s) {
+					if (vslen(s) || !globalsrch || !pico) {
+						srch->replacement = s;
+						obj_perm((void*)s);
+					} else {
+						/* Use previous string: this prevents replace with empty string */
+						/* vsrm(s);
+						srch->replacement = vsdup(globalsrch->replacement); */
+						srch->replacement = s;
+						obj_perm((void*)s);
+					}
+					return dopfnext(bw, setmark(srch));
+				} else
+					return -1;
+			} else
+				return dopfnext(bw, setmark(srch));
+			return 0;
+		} else {
+			rmsrch(srch);
+			return -1;
+		}
 	} else {
 		rmsrch(srch);
 		return -1;
@@ -997,41 +868,42 @@ static void goback(SRCH *srch, BW *bw)
 const char *rest_key = _("|rest of file|rR");
 const char *backup_key = _("|backup|bB");
 
-static int dopfrepl(W *w, int c, void *obj, int *notify)
+static int dopfrepl(W *w, int c, void *obj)
 {
 	BW *bw;
 	SRCH *srch = (SRCH *)obj;
 	WIND_BW(bw, w);
+	
+	again:
 	srch->addr = bw->cursor->byte;
-	/* Backspace means no for jmacs */
-	if (c == NO_CODE || c == 8 || c == 127 || yncheck(no_key, c))
-		return dopfnext(bw, srch, notify);
+	/* for jamcs backspace means no */
+	if (c == 8 || c == 127 || c == NO_CODE || yncheck(no_key, c))
+		return dopfnext(bw, srch);
 	else if (c == YES_CODE || yncheck(yes_key, c) || c == ' ') {
 		srch->recs.link.prev->yn = 1;
 		if (doreplace(bw, srch)) {
 			pfsave(bw->parent, srch);
 			return -1;
 		} else
-			return dopfnext(bw, srch, notify);
+			return dopfnext(bw, srch);
 	} else if (yncheck(rest_key, c) || c == '!') {
 		if (doreplace(bw, srch))
 			return -1;
 		srch->rest = 1;
-		return dopfnext(bw, srch, notify);
+		return dopfnext(bw, srch);
 	} else if (/* c == 8 || c == 127 || */ yncheck(backup_key, c)) {
  		W *tw = bw->parent;
 		goback(srch, bw);
 		goback(srch, (BW *)tw->object);
-		return dopfnext((BW *)tw->object, srch, notify);
+		return dopfnext((BW *)tw->object, srch);
 	} else if (c != -1) {
-		if (notify)
-			*notify = 1;
 		pfsave(bw->parent, srch);
 		nungetc(c);
 		return 0;
 	}
-	if (mkqwnsr(bw->parent, sz(joe_gettext(_("Replace (Y)es (N)o (R)est (B)ackup (%{abort} to abort)?"))), dopfrepl, pfsave, srch, notify))
-		return 0;
+	c = query(bw->parent, sz(joe_gettext(_("Replace (Y)es (N)o (R)est (B)ackup (%{abort} to abort)?"))), QW_SR);
+	if (c != -1)
+		goto again;
 	else
 		return pfsave(bw->parent, srch);
 }
@@ -1110,7 +982,7 @@ static int fnext(BW *bw, SRCH *srch)
 	}
 	/* Compile pattern if we don't already have it */
 	if (!srch->comp) {
-		srch->comp = joe_regcomp(bw->b->o.charmap, srch->pattern, sLEN(srch->pattern), srch->ignore, srch->regex, srch->debug);
+		srch->comp = joe_regcomp(bw->b->o.charmap, srch->pattern, vslen(srch->pattern), srch->ignore, srch->regex, srch->debug);
 		if (srch->comp->err) {
 			msgnw(bw->parent, joe_gettext(srch->comp->err));
 			return 4;
@@ -1173,7 +1045,7 @@ static int fnext(BW *bw, SRCH *srch)
 		return 2;
 }
 
-int dopfnext(BW *bw, SRCH *srch, int *notify)
+int dopfnext(BW *bw, SRCH *srch)
 {
 	W *w;
 	int fnr;
@@ -1251,9 +1123,9 @@ bye:		if (!srch->flg && !srch->rest) {
 				markb->xcol = piscol(markb);
 			}
 			srch->flg = 1;
-			if (dopfrepl(bw->parent, -1, srch, notify))
+			/* This call should not be here... */
+			if (dopfrepl(bw->parent, -1, srch))
 				ret = -1;
-			notify = 0;
 			srch = 0;
 		}
 		break;
@@ -1261,8 +1133,6 @@ bye:		if (!srch->flg && !srch->rest) {
 	bw->cursor->xcol = piscol(bw->cursor);
 	dofollows();
 	opt_mid = orgmid;
-	if (notify)
-		*notify = 1;
 	if (srch)
 		pfsave(bw->parent, srch);
 	else
@@ -1287,7 +1157,7 @@ int pfnext(W *w, int k)
 			srch->wrap_p->owner = &srch->wrap_p;
 			srch->wrap_flag = 0;
 		}
-		return dopfnext(bw, setmark(srch), NULL);
+		return dopfnext(bw, setmark(srch));
 	}
 }
 
@@ -1296,12 +1166,12 @@ void save_srch(FILE *f)
 	if(globalsrch) {
 		if(globalsrch->pattern) {
 			fprintf(f,"	pattern ");
-			emit_string(f,globalsrch->pattern,sLEN(globalsrch->pattern));
+			emit_string(f,sv(globalsrch->pattern));
 			fprintf(f,"\n");
 		}
 		if(globalsrch->replacement) {
 			fprintf(f,"	replacement ");
-			emit_string(f,globalsrch->replacement,sLEN(globalsrch->replacement));
+			emit_string(f,sv(globalsrch->replacement));
 			fprintf(f,"\n");
 		}
 		fprintf(f,"	backwards %d\n",globalsrch->backwards);
@@ -1315,8 +1185,8 @@ void save_srch(FILE *f)
 
 void load_srch(FILE *f)
 {
-	char buf[1024];
-	char bf[1024];
+	char *buf = 0;
+	char *bf = 0;
 	char *pattern = 0;
 	char *replacement = 0;
 	int backwards = 0;
@@ -1324,23 +1194,21 @@ void load_srch(FILE *f)
 	int regex = 0;
 	int replace = 0;
 	int block_restrict = 0;
-	while(fgets(buf,sizeof(buf),f) && zcmp(buf,"done\n")) {
+	while(vsgets(&buf,f) && zcmp(buf, "done")) {
 		const char *p=buf;
 		parse_ws(&p,'#');
 		if(!parse_kw(&p,"pattern")) {
 			ptrdiff_t len;
 			parse_ws(&p,'#');
-			bf[0] = 0;
-			len = parse_string(&p,bf,SIZEOF(bf));
+			len = parse_string(&p,&bf);
 			if (len>0)
-				pattern = vsncpy(NULL,0,bf,len);
+				pattern = vsdup(bf);
 		} else if(!parse_kw(&p,"replacement")) {
 			ptrdiff_t len;
 			parse_ws(&p,'#');
-			bf[0] = 0;
-			len = parse_string(&p,bf,SIZEOF(bf));
+			len = parse_string(&p,&bf);
 			if (len>0)
-				replacement = vsncpy(NULL,0,bf,len);
+				replacement = vsdup(bf);
 		} else if(!parse_kw(&p,"backwards")) {
 			parse_ws(&p,'#');
 			parse_int(&p,&backwards);

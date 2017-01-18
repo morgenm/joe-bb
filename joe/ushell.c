@@ -188,12 +188,9 @@ static void cdata(void *obj, char *dat, ptrdiff_t siz)
 	}
 }
 
-int cstart(BW *bw, const char *name, char **s, void *obj, int *notify, int build, int out_only, const char *first_command, int vt)
+int cstart(BW *bw, const char *name, char **s, void *obj, int build, int out_only, const char *first_command, int vt)
 {
 #ifdef __MSDOS__
-	if (notify) {
-		*notify = 1;
-	}
 	varm(s);
 	msgnw(bw->parent, joe_gettext(_("Sorry, no sub-processes in DOS (yet)")));
 	return -1;
@@ -202,9 +199,6 @@ int cstart(BW *bw, const char *name, char **s, void *obj, int *notify, int build
 	ptrdiff_t shell_w = -1, shell_h = -1;
 
 
-	if (notify) {
-		*notify = 1;
-	}
 	if (bw->b->pid) {
 		if (!vt) { /* Don't complain if shell already running.. makes F-key switching nicer */
 			/* Keep old behavior for dumb terminal */
@@ -267,11 +261,12 @@ static int dobknd(BW *bw, int vt)
 
         ok:
 	a = vamk(3);
+	vaperm(a);
 	s = vsncpy(NULL, 0, sz(sh));
 	a = vaadd(a, s);
 	s = vsncpy(NULL, 0, sc("-i"));
 	a = vaadd(a, s);
-	return cstart(bw, sh, a, NULL, NULL, 0, 0, (vt ? (zstr(sh, "csh") ? start_csh : start_sh) : NULL), vt);
+	return cstart(bw, sh, a, NULL, 0, 0, (vt ? (zstr(sh, "csh") ? start_csh : start_sh) : NULL), vt);
 }
 
 /* Start ANSI shell */
@@ -302,66 +297,34 @@ int ubknd(W *w, int k)
 
 /* Run a program in a window */
 
-static int dorun(W *w, char *s, void *object, int *notify)
-{
-	BW *bw;
-	char **a;
-	char *cmd;
-	WIND_BW(bw, w);
-        if (!modify_logic(bw,bw->b))
-        	return -1;
-
-	a = vamk(10);
-	cmd = vsncpy(NULL, 0, sc("/bin/sh"));
-
-	a = vaadd(a, cmd);
-	cmd = vsncpy(NULL, 0, sc("-c"));
-	a = vaadd(a, cmd);
-	a = vaadd(a, s);
-	return cstart(bw, "/bin/sh", a, NULL, notify, 0, 0, NULL, 0);
-}
-
 B *runhist = NULL;
 
 int urun(W *w, int k)
 {
-	if (wmkpw(w, joe_gettext(_("Program to run: ")), &runhist, dorun, "Run", NULL, cmplt_command, NULL, NULL, locale_map, 1)) {
-		return 0;
+	char *s;
+	BW *bw;
+	WIND_BW(bw, w);
+	
+	s = ask(w, joe_gettext(_("Program to run: ")), &runhist, "Run",
+	        cmplt_command, locale_map, 0, 0, NULL);
+
+	if (s) {
+		char **a;
+		char *cmd;
+		if (!modify_logic(bw,bw->b))
+			return -1;
+
+		a = vamk(10);
+		cmd = vsncpy(NULL, 0, sc("/bin/sh"));
+
+		a = vaadd(a, cmd);
+		cmd = vsncpy(NULL, 0, sc("-c"));
+		a = vaadd(a, cmd);
+		a = vaadd(a, s);
+		return cstart(bw, "/bin/sh", a, NULL, 0, 0, NULL, 0);
 	} else {
 		return -1;
 	}
-}
-
-static int dobuild(W *w, char *s, void *object, int *notify)
-{
-	BW *bw;
-	char **a = vamk(10);
-	char *cmd = vsncpy(NULL, 0, sc("/bin/sh"));
-	char *t = NULL;
-	WIND_BW(bw, w);
-
-
-	bw->b->o.ansi = 1;
-	bw->b->o.syntax = load_syntax("ansi");
-	/* Turn on shell mode for each window */
-	ansiall(bw->b);
-
-	a = vaadd(a, cmd);
-	cmd = vsncpy(NULL, 0, sc("-c"));
-	a = vaadd(a, cmd);
-	if (bw->b->current_dir && bw->b->current_dir[0]) {
-		// Change directory before we run
-		t = vsncpy(sv(t), sc("cd '"));
-		t = vsncpy(sv(t), sv(bw->b->current_dir));
-		t = vsncpy(sv(t), sc("' && "));
-	}
-	t = vsncpy(sv(t), sc("echo \"\nJOE: cd `pwd`\n\" && if ("));
-	t = vsncpy(sv(t), sv(s));
-	t = vsncpy(sv(t), sc("); then echo \"\nJOE: [32mPASS[0m (exit status = $?)\n\"; else echo \"\nJOE: [31mFAIL[0m (exit status = $?)\n\"; fi"));
-	vsrm(s);
-	s = t;
-	a = vaadd(a, s);
-	return cstart(bw, "/bin/sh", a, NULL, notify, 1, 0, NULL, 0);
 }
 
 B *buildhist = NULL;
@@ -369,22 +332,46 @@ B *buildhist = NULL;
 int ubuild(W *w, int k)
 {
 	BW *bw;
+	const char *s;
+	int prev = 0;
+	
 	WIND_BW(bw, w);
+
 	if (buildhist) {
-		if ((bw=wmkpw(bw->parent, joe_gettext(_("Build command: ")), &buildhist, dobuild, "Run", NULL, cmplt_command, NULL, NULL, locale_map, 1))) {
-			uuparw(bw->parent, 0);
-			u_goto_eol(bw->parent, 0);
-			bw->cursor->xcol = piscol(bw->cursor);
-			return 0;
-		} else {
-		return -1;
-		}
+		s = joe_gettext(_("Build command: "));
+		prev = 1;
 	} else {
-		if (wmkpw(bw->parent, joe_gettext(_("Enter build command (for example, 'make'): ")), &buildhist, dobuild, "Run", NULL, cmplt_command, NULL, NULL, locale_map, 1)) {
-			return 0;
-		} else {
-		return -1;
+		s = joe_gettext(_("Enter build command (for example, 'make'): "));
+	}
+	/* "file prompt" was set for this... */
+	s = ask(w, s, &buildhist, "Run", cmplt_command, locale_map, 0, prev, NULL);
+	if (s) {
+		char **a = vamk(10);
+		char *cmd = vsncpy(NULL, 0, sc("/bin/sh"));
+		char *t = NULL;
+
+
+		bw->b->o.ansi = 1;
+		bw->b->o.syntax = load_syntax("ansi");
+		/* Turn on shell mode for each window */
+		ansiall(bw->b);
+
+		a = vaadd(a, cmd);
+		cmd = vsncpy(NULL, 0, sc("-c"));
+		a = vaadd(a, cmd);
+		if (bw->b->current_dir && bw->b->current_dir[0]) {
+			// Change directory before we run
+			t = vsncpy(sv(t), sc("cd '"));
+			t = vsncpy(sv(t), sv(bw->b->current_dir));
+			t = vsncpy(sv(t), sc("' && "));
 		}
+		t = vsncpy(sv(t), sc("echo \"\nJOE: cd `pwd`\n\" && if ("));
+		t = vsncpy(sv(t), sv(s));
+		t = vsncpy(sv(t), sc("); then echo \"\nJOE: [32mPASS[0m (exit status = $?)\n\"; else echo \"\nJOE: [31mFAIL[0m (exit status = $?)\n\"; fi"));
+		a = vaadd(a, t);
+		return cstart(bw, "/bin/sh", a, NULL, 1, 0, NULL, 0);
+	} else {
+		return -1;
 	}
 }
 
@@ -392,58 +379,45 @@ B *grephist = NULL;
 
 int ugrep(W *w, int k)
 {
+	char *s;
+	const char *prompt;
+	int prev = 0;
 	BW *bw;
 	WIND_BW(bw, w);
-	/* Set parser to grep */
-	bw->b->parseone = parseone_grep;
+	
 	if (grephist) {
-		if ((bw=wmkpw(bw->parent, joe_gettext(_("Grep command: ")), &grephist, dobuild, "Run", NULL, cmplt_command, NULL, NULL, locale_map, 1))) {
-			uuparw(bw->parent, 0);
-			u_goto_eol(bw->parent, 0);
-			bw->cursor->xcol = piscol(bw->cursor);
-			return 0;
-		} else {
-		return -1;
-		}
+		prompt = joe_gettext(_("Grep command: "));
+		prev = 1;
 	} else {
-		if (wmkpw(bw->parent, joe_gettext(_("Enter grep command (for example, 'grep -n foo *.c'): ")), &grephist, dobuild, "Run", NULL, cmplt_command, NULL, NULL, locale_map, 1)) {
-			return 0;
-		} else {
+		prompt = joe_gettext(_("Enter grep command (for example, 'grep -n foo *.c'): "));
+	}
+	/* "file prompt" was set for this... */
+	s = ask(w, prompt, &grephist, "Run", cmplt_command, locale_map, 0, prev, NULL);
+	if (s) {
+		char **a = vamk(10);
+		char *cmd = vsncpy(NULL, 0, sc("/bin/sh"));
+
+		a = vaadd(a, cmd);
+		cmd = vsncpy(NULL, 0, sc("-c"));
+		a = vaadd(a, cmd);
+		a = vaadd(a, s);
+		return cstart(bw, "/bin/sh", a, NULL, 1, 0, NULL, 0);
+	} else {
 		return -1;
-		}
 	}
 }
 
 /* Kill program */
-
-static int pidabort(W *w, int c, void *object, int *notify)
-{
-	BW *bw;
-	WIND_BW(bw, w);
-	if (notify) {
-		*notify = 1;
-	}
-	if (c != YES_CODE && !yncheck(yes_key, c)) {
-		return -1;
-	}
-	if (bw->b->pid) {
-		kill(bw->b->pid, 1);
-		return -1;
-	} else {
-		return -1;
-	}
-}
 
 int ukillpid(W *w, int k)
 {
 	BW *bw;
 	WIND_BW(bw, w);
 	if (bw->b->pid) {
-		if (mkqw(bw->parent, sz(joe_gettext(_("Kill program (y,n,%{abort})?"))), pidabort, NULL, NULL, NULL)) {
-			return 0;
-		} else {
-			return -1;
-		}
+		int c = query(w, sz(joe_gettext(_("Kill program (y,n,%{abort})?"))), 0);
+		if (bw->b->pid && (c == YES_CODE || yncheck(yes_key, c)))
+			kill(bw->b->pid, 1);
+		return -1;
 	} else {
 		return 0;
 	}
