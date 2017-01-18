@@ -270,9 +270,9 @@ static KMAP *kbuild(CAP *cap, KMAP *kmap, char *seq, MACRO *bind, int *err, cons
 		s = jgetstr(cap, seq + 1);
 		seq[x] = c;
 		if (s && (iv = tcompile(cap, s, 0, 0, 0, 0))
-		    && (sLEN(iv) > 1 || (signed char)iv[0] < 0)) {
+		    && (vslen(iv) > 1 || (signed char)iv[0] < 0)) {
 			capseq = iv;
-			seql = sLEN(iv);
+			seql = vslen(iv);
 			for (seq += x; *seq == ' '; ++seq) ;
 		}
 #endif
@@ -411,20 +411,6 @@ int kmap_empty(KMAP *k)
 
 B *keymaphist=0;
 
-static int dokeymap(W *w,char *s,void *object,int *notify)
-{
-	KMAP *k=ngetcontext(s);
-	vsrm(s);
-	if(notify) *notify=1;
-	if(!k) {
-		msgnw(w,joe_gettext(_("No such keymap")));
-		return -1;
-	}
-	rmkbd(w->kbd);
-	w->kbd=mkkbd(k);
-	return 0;
-}
-
 static char **get_keymap_list()
 {
 	char **lst = 0;
@@ -437,12 +423,10 @@ static char **get_keymap_list()
 
 static int keymap_cmplt(BW *bw, int k)
 {
-	/* Reload every time: we should really check date of tags file...
-	  if (tag_word_list)
-	  	varm(tag_word_list); */
-
-	if (!keymap_list)
+	if (!keymap_list) {
 		keymap_list = get_keymap_list();
+		vaperm(keymap_list);
+	}
 
 	if (!keymap_list) {
 		ttputc(7);
@@ -454,6 +438,19 @@ static int keymap_cmplt(BW *bw, int k)
 
 int ukeymap(W *w, int k)
 {
-	if (wmkpw(w,joe_gettext(_("Change keymap: ")),&keymaphist,dokeymap,"keymap",NULL,keymap_cmplt,NULL,NULL,locale_map,0)) return 0;
-	else return -1;
+	char *s = ask(w, joe_gettext(_("Change keymap: ")),
+		&keymaphist,"keymap",keymap_cmplt,locale_map,0,0,NULL);
+
+	if (s) {
+		KMAP *k=ngetcontext(s);
+		if(!k) {
+			msgnw(w,joe_gettext(_("No such keymap")));
+			return -1;
+		}
+		rmkbd(w->kbd);
+		w->kbd=mkkbd(k);
+		return 0;
+	} else {
+		return -1;
+	}
 }
