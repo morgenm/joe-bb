@@ -34,8 +34,30 @@ static int selecting = 0;	/* Set if we did any selecting */
 
 static int Cb;
 static ptrdiff_t Cx, Cy;
+static ptrdiff_t Lx, Ly;
 static long last_msec=0;		/* time in ms when event occurred */
 static int clicks;
+static int Cbutton;
+
+#ifdef JOEWIN
+
+#undef MOUSE_MULTI_THRESH
+#define MOUSE_MULTI_THRESH dblclicktime
+static int dblclicktime=0;	/* Delay between double clicks */
+
+/* Extended mouse mode (complicated by out-of-bounds coordinates).  Completely undefined elsewhere.
+   Kindof have to invent own thing here, though this is loosely based off the rejected xterm patch
+   as well as improvements to xterm for mouse support in large terminals */
+
+#define COORD_MAX		2047
+
+#else
+
+#define COORD_MAX		255
+
+#endif
+
+#define COORD_OUTOFFRAME_START	(COORD_MAX - 15)
 
 static void fake_key(int c)
 {
@@ -50,47 +72,64 @@ static void fake_key(int c)
 
 /* Translate mouse coordinates */
 
-static ptrdiff_t mcoord(ptrdiff_t x)
+ptrdiff_t mcoord(ptrdiff_t x)
 {
-	if (x>=33 && x<=240)
+	if (x>=32 && x<=COORD_OUTOFFRAME_START)
 		return x - 33 + 1;
-	else if (x==32)
-		return -1 + 1;
-	else if (x>240)
-		return x - 257 + 1;
+	else if (x>COORD_OUTOFFRAME_START)
+		return x - COORD_MAX - 1;
 	else
 		return 0; /* This should not happen */
 }
 
-static int mouse_event(W *w)
+static int joe_mouse_event()
 {
 	if ((Cb & 0x41) == 0x40) {
-		fake_key(KEY_MWUP); /* Mouse wheel scroll up */
+		fake_key(KEY_MWUP);
 		return 0;
 	}
 
 	if ((Cb & 0x41) == 0x41) {
-		fake_key(KEY_MWDOWN); /* Mouse wheel scroll down */
+		fake_key(KEY_MWDOWN);
 		return 0;
 	}
 
 	if ((Cb & 3) == 3) {
 		/* button released */
-		mouseup(Cx,Cy);
-	} else if ((Cb & 3) == (rtbutton ? 2 : 0)) { /* left (or right) to select */
+		if (Cbutton == 0)
+			mouseup(Cx,Cy);
+		else if (Cbutton == 1)
+			fake_key(KEY_MIDDLEUP);
+		else if (Cbutton == 2)
+			fake_key(KEY_MRUP);
+
+		Cbutton = -1;
+	} else if ((Cb & 3) == (rtbutton ? 2 : 0)) {	/* preferred ("left") button */
+		Cbutton = 0;
 		if ((Cb & 32) == 0)
 			/* button pressed */
-			mousedn(Cx, Cy, 0);
+			mousedn(Cx,Cy);
 		else
 			/* drag */
 			mousedrag(Cx,Cy);
-	} else if ((Cb & 3) == 1 && (Cb & 32) == 0) { /* middle button to paste */
-		mousedn(Cx, Cy, 1);
+	} else if ((Cb & 3) == 1) {
+		/* Middle button */
+		Cbutton = 1;
+		if ((Cb & 32) == 0)
+			fake_key(KEY_MIDDLEDOWN);
+		else
+			fake_key(KEY_MIDDLEDRAG);
+	} else if ((Cb & 3) == 0 || (Cb & 3) == 2) {
+		/* Right button -- not caught in above case so opposite of "preferred" */
+		Cbutton = 2;
+		if ((Cb & 32) == 0)
+			fake_key(KEY_MRDOWN);
+		else
+			fake_key(KEY_MRDRAG);
 	}
+
 	return 0;
 }
-
-/* Parse old style mouse event parameters. */
 
 int uxtmouse(W *w, int k)
 {
@@ -106,7 +145,7 @@ int uxtmouse(W *w, int k)
 
 	Cx = mcoord(Cx);
 	Cy = mcoord(Cy);
-	return mouse_event(w);
+	return joe_mouse_event();
 }
 
 /* Parse xterm extended 1006 mode mouse event parameters. */
@@ -133,64 +172,49 @@ int uextmouse(W *w, int k)
 	}
 	if (c == 'm')
 		Cb |= 3;
-	return mouse_event(w);
+	return joe_mouse_event();
 }
 
 long mnow()
 {
+#ifndef JOEWIN
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
 	return tv.tv_sec * 1000 + tv.tv_usec / 1000;
+#else
+	return (int)GetTickCount();
+#endif
 }
 
-void mousedn(ptrdiff_t x, ptrdiff_t y, int middle)
+void mousedn(ptrdiff_t x,ptrdiff_t y)
 {
 	Cx = x, Cy = y;
-	if (middle) {
-		clicks = 4;
-		fake_key(KEY_MIDDLEDOWN);
-	} else {
-		if (last_msec == 0 || mnow() - last_msec > MOUSE_MULTI_THRESH) {
-			/* not a multiple click */
-			clicks=1;
-			fake_key(KEY_MDOWN);
-		} else if(clicks==1) {
+	if (last_msec == 0 || mnow() - last_msec > MOUSE_MULTI_THRESH) {
+		/* not a multiple click */
+		clicks=1;
+		fake_key(KEY_MDOWN);
+	} else if (Lx == Cx && Ly == Cy) {
+		if (clicks == 1) {
 			/* double click */
-			clicks=2;
+			clicks = 2;
 			fake_key(KEY_M2DOWN);
-		} else if(clicks==2) {
+		} else if (clicks == 2) {
 			/* triple click */
-			clicks=3;
+			clicks = 3;
 			fake_key(KEY_M3DOWN);
 		} else {
 			/* start over */
-			clicks=1;
+			clicks = 1;
 			fake_key(KEY_MDOWN);
 		}
-	}
-}
-
-int udefmiddledown(W *w, int k)
-{
-	if (utomouse(w, 0)) /* Positions cursor */
-		return -1;
-	w = maint->curwin;
-	if (!(w->watom->what == TYPETW || w->watom->what == TYPEPW))
-		return -1;
-	if (joexterm) {
-		/* Request xterm to send selection text to JOE */
-		ttputs("\33]52;;?\33\\");
-		return 0;
 	} else {
-		/* Copy region to cursor */
-		return ublkcpy(w, -2); /* Copy */
+		clicks = 1;
+		fake_key(KEY_MDOWN);
 	}
+	Lx = Cx, Ly = Cy;
 }
 
-int udefmiddleup(W *xx, int k)
-{
-	return 0;
-}
+#ifndef JOEWIN /* We can do better in Windows... */
 
 /* Return base64 code character given 6-bit number */
 
@@ -270,10 +294,13 @@ static void ttputs64_flush()
     base64_pad = 0;
 }
 
+#endif
+
 static void select_done(struct charmap *map)
 {
 	/* Feed text to xterm */
 	if (joexterm && markv(1)) {
+#ifndef JOEWIN
 		off_t left = markb->xcol;
 		off_t right = markk->xcol;
 		P *q = pdup(markb, "select_done");
@@ -326,6 +353,10 @@ static void select_done(struct charmap *map)
 		ttputs64_flush();
 		ttputs("\33\\");
 		prm(q);
+#else
+		CMD *c = findcmd("wincopy");
+		if (c) execmd(c, 0);
+#endif
 	}
 }
 
@@ -344,30 +375,50 @@ void mouseup(ptrdiff_t x,ptrdiff_t y)
 		case 3:
 			fake_key(KEY_M3UP);
 			break;
-
-		case 4:
-			fake_key(KEY_MIDDLEUP);
-			break;
 	}
 	last_msec = mnow();
 }
 
 void mousedrag(ptrdiff_t x,ptrdiff_t y)
 {
+#ifdef JOEWIN
+	// HACK: PuTTY sends multiple mouse updates even if the pointer has moved
+	// by a pixel but not to the point that it covers a different character.
+	// This makes for a bad mouse experience in most cases -- you inadvertently
+	// select a new block when you tried to simply reposition the cursor, so
+	// normally just checking Current != Last is good enough to guard against
+	// this.  However, this adversely affects automatic horizontal scrolling.
+	// JOE doesn't have a horizontal auto-scroller (it does vertical), so once
+	// the mouse cursor exits the confines of the window, you can't get it to
+	// select more characters horizontally.
+	// SO, we make an exception in the case when the cursors is outside of the
+	// editor's bounds -- if you keep moving the mouse, it will keep selecting
+	// more characters.
+	ptrdiff_t w, h;
+
+	ttgtsz(&w, &h);
+
 	Cx = x, Cy = y;
-	switch(clicks) {
-		case 1:
-			fake_key(KEY_MDRAG);
-			break;
+	if ((Lx != Cx || Ly != Cy) || (Cx <= 0 || Cx >= w)) {
+#else
+	Cx = x, Cy = y;
+	if (Lx != Cx || Ly != Cy) {
+#endif
+		switch(clicks) {
+			case 1:
+				fake_key(KEY_MDRAG);
+				break;
   
-		case 2:
-			fake_key(KEY_M2DRAG);
-			break;
+			case 2:
+				fake_key(KEY_M2DRAG);
+				break;
   
-		case 3:
-			fake_key(KEY_M3DRAG);
-			break;
+			case 3:
+				fake_key(KEY_M3DRAG);
+				break;
+		}
 	}
+	Lx = Cx, Ly = Cy;
 }
 
 ptrdiff_t drag_size; /* Set if we are resizing a window */
@@ -377,12 +428,16 @@ int utomouse(W *xx, int k)
 	BW *bw;
 	ptrdiff_t x = Cx - 1, y = Cy - 1;
 	W *w = watpos(maint,x,y);
+	
 	if (!w)
 		return -1;
 	maint->curwin = w;
+	WIND_BW(bw, w);
+#ifdef JOEWIN
+	notify_selection();
+#endif
 	drag_size = 0;
 	if (w->watom->what == TYPETW) {
-		WIND_BW(bw, w);
 		if (bw->o.hex) {
 			off_t goal_col = x - w->x + bw->offset - 60;
 			off_t goal_line;
@@ -432,9 +487,7 @@ int utomouse(W *xx, int k)
 			return 0;
 		}
 	} else if (w->watom->what == TYPEPW) {
-		PW *pw;
-		WIND_BW(bw, w);
-		pw = (PW *)bw->object;
+		PW *pw = (PW *)bw->object;
 		/* only one line in prompt windows */
 		pcol(bw->cursor,x - w->x + bw->offset - pw->promptlen + pw->promptofst);
 		bw->cursor->xcol = piscol(bw->cursor);
@@ -507,7 +560,12 @@ static int tomousestay()
 					goal_col = 0;
 					goal_line = bw->top->line;
 				} else if (y >= w->y + w->h) {
+#ifdef JOEWIN
+					// More windows-y behavior.  Scroll jumps around alot otherwise.
+					goal_col = x + bw->top->col;
+#else
 					goal_col = 1000;
+#endif
 					goal_line = w->h + bw->top->line - 2;
 				} else
 					goal_line = y - w->y + bw->top->line - 1;
@@ -516,7 +574,12 @@ static int tomousestay()
 					goal_col = 0;
 					goal_line = bw->top->line;
 				} else if (y >= w->y + w->h) {
+#ifdef JOEWIN
+					// More windows-y behavior.  Scroll jumps around alot otherwise.
+					goal_col = x + bw->top->col;
+#else
 					goal_col = 1000;
+#endif
 					goal_line = w->h + bw->top->line - 1;
 				} else
 					goal_line = y - w->y + bw->top->line;
@@ -540,8 +603,6 @@ static off_t anchor;		/* byte where mouse was originally pressed */
 static off_t anchorn;		/* near side of the anchored word */
 static int marked;		/* mark was set by defmdrag? */
 static int reversed;		/* mouse was dragged above the anchor? */
-
-/* Select text */
 
 int udefmdown(W *xx, int k)
 {
@@ -649,8 +710,6 @@ int udefmup(W *w, int k)
 	return 0;
 }
 
-/* Select words */
-
 int udefm2down(W *xx, int k)
 {
 	BW *bw;
@@ -708,8 +767,6 @@ int udefm2up(W *w, int k)
 	return 0;
 }
 
-/* Select lines */
-
 int udefm3down(W *xx, int k)
 {
 	BW *bw;
@@ -761,15 +818,69 @@ int udefm3up(W *w, int k)
 	return 0;
 }
 
+int udefmrdown(W *w, int k)
+{
+	return 0;
+}
+
+int udefmrup(W *w, int k)
+{
+	return 0;
+}
+
+int udefmrdrag(W *w, int k)
+{
+	return 0;
+}
+
+int udefmiddledown(W *w, int k)
+{
+	if (joexterm) {
+#ifndef JOEWIN
+		/* Request xterm to send selection text to JOE */
+		ttputs("\33]52;;?\33\\");
+#else
+		CMD *c = findcmd("winpaste");
+		if (c) execmd(c, 0);
+#endif
+		return 0;
+	} else {
+		/* Copy region to cursor */
+		if (utomouse(w, 0)) /* Positions cursor */
+			return -1;
+		return ublkcpy(w, 0); /* Copy */
+	}
+}
+
+int udefmiddleup(W *w, int k)
+{
+	return 0;
+}
+
+int udefmiddledrag(W *w, int k)
+{
+	return 0;
+}
+
 void mouseopen()
 {
 #ifdef MOUSE_XTERM
 	if (usexmouse) {
+#ifdef JOEWIN
+		/* Use system-wide double click time */
+		dblclicktime = GetDoubleClickTime();
+
+		/* Extended (~2000x2000 mode) mouse tracking + external coordinates */
+		ttputs("\33[?1005h\33[?2007h");
+
+		/* No ttflsh() in Windows, because this comes before the rendezvous. */
+#else
 		ttputs("\33[?1002h");
 		ttputs("\33[?1006h");
 		if (joexterm)
 			ttputs("\33[?2007h");
 		ttflsh();
+#endif
 	}
 #endif
 }
@@ -778,11 +889,17 @@ void mouseclose()
 {
 #ifdef MOUSE_XTERM
 	if (usexmouse) {
+#ifdef JOEWIN
+		ttputs("\33[?1005l\33[?2007l");
+
+		/* No ttflsh() in Windows, because this comes before the rendezvous. */
+#else
 		if (joexterm)
 			ttputs("\33[?2007l");
 		ttputs("\33[?1006l");
 		ttputs("\33[?1002l");
 		ttflsh();
+#endif
 	}
 #endif
 }
