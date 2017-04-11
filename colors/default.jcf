@@ -1,0 +1,31 @@
+
+.colors 16
+
+-selection 	default/default inverse
+-menusel 	default/default inverse
+-linum		BLACK
+-curlinum	default
+
+=Idle
+=Bad            bold red
+=Preproc        blue
+=Define         bold blue
+=Comment        green
+=IncLocal       cyan
+=IncSystem      bold cyan
+=Constant       cyan
+=Escape         bold cyan
+=Type           bold
+=Keyword        bold
+=Brace          magenta
+=Control
+=Ident
+
+=diff.DelLine	red
+=diff.AddLine	green
+=diff.ChgLine	magenta
+=diff.Garbage	dim white
+=diff.FileOld	bold red
+=diff.FileNew	bold green
+=diff.Hunk	bold blue
+
