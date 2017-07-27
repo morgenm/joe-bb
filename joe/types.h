@@ -23,6 +23,11 @@
 
 #include "config.h"
 
+#ifdef JOEWIN
+#include "joedata.h"
+#define _USE_MATH_DEFINES
+#endif
+
 /* Common header files */
 
 #include <stdio.h>
@@ -30,6 +35,34 @@
 #include <errno.h>
 #include <math.h>
 #include <stdarg.h>
+
+#ifdef JOEWIN
+/* Windows header */
+#define WIN32_LEAN_AND_MEAN
+#include "jwwin.h"
+
+/* Things defined in windows.h that we don't want... */
+#undef HTSIZE
+#undef ERROR
+#undef small
+
+/* Other headers */
+#include <io.h>
+#include <assert.h>
+
+/* Make off_t match the pointer size */
+/* NOTES: off_t is always 32 bits in Windows :-(.  Fortunately virtually none of the
+   CRT functions really use it over int (minus some declarations of stat, but we keep
+   tight control over it) so it's technically cheating but should be OK. */
+#ifdef _M_X64
+#define _OFF_T_DEFINED 1
+typedef long long off_t;
+typedef long long _off_t;
+#undef SIZEOF_OFF_T
+#define SIZEOF_OFF_T 8
+#endif
+
+#endif
 
 #ifdef HAVE_SYS_TYPES_H
 #include <sys/types.h>
@@ -144,13 +177,19 @@ typedef int pid_t;
 #endif
 
 /* Largest signed integer */
+#ifndef MAXINT
 #define MAXINT  ((((unsigned int)-1)/2)-1)
+#endif
 
 /* Largest signed long */
+#ifndef MAXLONG
 #define MAXLONG ((((unsigned long)-1L)/2)-1)
+#endif
 
 /* Largest signed long long */
+#ifndef MAXLONGLONG
 #define MAXLONGLONG ((((unsigned long long)-1L)/2)-1)
+#endif
 
 /* Largest off_t */
 /* BSD provides a correct OFF_MAX macro, but AIX provides a broken one,
@@ -172,6 +211,13 @@ typedef int pid_t;
 
 /* We use -256 so that it's still unique even if we promoted a signed char to an int */
 #define NO_MORE_DATA (-256)
+
+#ifndef JOEWIN
+
+/* This is defined as a function in Windows build since it is computed at runtime */
+#define JOEDATA_PLUS(x) (JOEDATA x)
+
+#endif
 
 #if defined __MSDOS__ && SIZEOF_INT == 2 /* real mode ms-dos compilers */
 #if SIZEOF_VOID_P == 4 /* real mode ms-dos compilers with 'far' memory model or something like that */
@@ -201,7 +247,7 @@ typedef int pid_t;
 #define SEGSIZ PGSIZE
 
 /* Max number of pages allowed in core */
-#define NPAGES 8192
+#define NPAGES 65536
 /* Max core memory used in bytes */
 #define ILIMIT (PGSIZE*NPAGES)
 /* Hash table size (should be double the max number of pages) */
@@ -227,6 +273,10 @@ typedef int pid_t;
 #define KEY_MWDOWN	0x10000A
 #define KEY_MIDDLEUP	0x10000B
 #define KEY_MIDDLEDOWN	0x10000C
+#define KEY_MIDDLEDRAG	0x10000D
+#define KEY_MRDOWN	0x10000E
+#define KEY_MRUP	0x10000F
+#define KEY_MRDRAG	0x100010
 
 #define FITHEIGHT	4		/* Minimum height needed for new text windows */
 #define FITMIN		2		/* Minimum main window height */
@@ -300,7 +350,13 @@ struct highlight_state {
 
 /* Include files */
 
+#ifdef JOEWIN
+#include "jwcolors.h"
+#include "jwversion.h"
+#endif
+
 #include "obj.h"
+#include "libcoro.h"
 #include "coroutine.h"
 #include "charmap.h"
 #include "cclass.h"
@@ -353,3 +409,12 @@ struct highlight_state {
 #include "state.h"
 #include "options.h"
 #include "selinux.h"
+
+#ifdef JOEWIN
+#include "jwglobals.h"
+#include "jwglue.h"
+#include "bupdates.h"
+#include "uwindows.h"
+#include "jwutils.h"
+#include "subproc.h"
+#endif
