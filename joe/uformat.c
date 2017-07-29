@@ -170,7 +170,7 @@ static off_t prefix(BW *bw, P *p,int up)
 		pgetc(q);
 	while (!pisbol(q)) {
 		/* int c; */
-		if (!joe_isblank(p->b->o.charmap, ( /* c = */ prgetc(q)))) {
+		if (!joe_isblank(p->b->o.charmap, (/* c = */ prgetc(q)))) {
 		/*
 			if (up && (c == '*' || c == '-')) {
 				if (!pisbol(q)) {
@@ -212,9 +212,9 @@ P *pbop(BW *bw, P *p)
 	P *last;
 
 	p_goto_bol(p);
+	last = pdup(p, "pbop");
 	indent = nindent(bw, p, 0);
 	prelen = prefix(bw, p, 0);
-	last = pdup(p, "pbop");
 	while (!pisbof(p) && (!within || !markb || p->byte > markb->byte)) {
 		off_t ind;
 		off_t len;
@@ -245,7 +245,8 @@ P *pbop(BW *bw, P *p)
 		if (ind < indent) {
 			pset(p, last);
 			break;
-			/* if (pisbof(p)) {
+			/*
+			if (pisbof(p)) {
 				break;
 			}
 			pprevl(p);
@@ -398,6 +399,7 @@ void wrapword(BW *bw, P *p, off_t indent, int french, int no_over, char *indents
 				}
 				indent = txtwidth1(bw->o.charmap, bw->o.tab, indents, tx);
 			}
+			/* Don't duplicate if it looks like a bullet */
 			for (x = 0; indents[x] && (indents[x] == ' ' || indents[x] == '\t'); ++x);
 			y = zlen(indents);
 			while (y && (indents[y - 1] == ' ' || indents[y - 1] == '\t'))
@@ -405,7 +407,7 @@ void wrapword(BW *bw, P *p, off_t indent, int french, int no_over, char *indents
 			/* Don't duplicate bullet */
 			if (y && ((indents[y - 1] == '*' && !cpara(bw, '*')) || (indents[y - 1] == '-' && !cpara(bw, '-'))) &&
 			    (y == 1 || indents[y - 2] == ' ' || indents[y - 2] == '\t'))
-			    	indents[y - 1] = ' ';
+				indents[y - 1] = ' ';
 			/* Fix C comment */
 			if (indents[x] == '/' && indents[x + 1] == '*')
 				indents[x] = ' ';
@@ -484,8 +486,8 @@ void wrapword(BW *bw, P *p, off_t indent, int french, int no_over, char *indents
 		/* Move word to beginning of next line */
 		binsc(p, '\n');
 		
-		/* When overtype is on, do not insert lines */
-		if (!no_over && p->b->o.overtype){
+		/* Take care that wordwrap is done the right way when overtype mode is active */
+		if (!no_over && p->b->o.overtype) {
 			/* delete the next line break which is unnecessary */
 			r = pdup(p, "wrapword");
 			/* p_goto_eol(r); */
@@ -506,7 +508,7 @@ void wrapword(BW *bw, P *p, off_t indent, int french, int no_over, char *indents
 			p_goto_eol(s);
 			
 			/* If s is located behind r then the line goes beyond the right margin and we need to call wordwrap() for that line. */
-/*
+/* for this to work properly we need to detect end of paragraph
 			if (r->byte < s->byte){
 				wrapword(bw, r, indent, french, 1, indents);
 			}
@@ -608,7 +610,7 @@ int uformat(W *w, int k)
 		y = zlen(indents);
 		while (y && (indents[y - 1] == ' ' || indents[y - 1] == '\t'))
 			--y;
-		/* Don't duplicate if it looks like a bullet */
+		/* Don't duplicate bullet */
 		if (y && ((indents[y - 1] == '*' && !cpara(bw, '*')) || (indents[y - 1] == '-' && !cpara(bw, '-'))) &&
 		    (y == 1 || indents[y - 2] == ' ' || indents[y - 2] == '\t'))
 			indents[y - 1] = ' ';

@@ -120,14 +120,14 @@ static void menudisp(W *w, int flg)
 	}
 	if (transpose) {
 		m->parent->cury = (m->cursor % m->lines) - m->top;
-		col = txtwidth(m->list[m->cursor],zlen(m->list[m->cursor]));
+		col = txtwidth(locale_map,m->list[m->cursor],zlen(m->list[m->cursor]));
 		if (col < m->width)
 			m->parent->curx = (m->cursor / m->lines) * (m->width + 1) + col;
 		else
 			m->parent->curx = (m->cursor / m->lines) * (m->width + 1) + m->width;
 	} else {
 		m->parent->cury = (m->cursor - m->top) / m->perline;
-		col = txtwidth(m->list[m->cursor],zlen(m->list[m->cursor]));
+		col = txtwidth(locale_map,m->list[m->cursor],zlen(m->list[m->cursor]));
 		if (col < m->width)
 			m->parent->curx = ((m->cursor - m->top) % m->perline) * (m->width + 1) + col;
 		else
@@ -151,7 +151,7 @@ static ptrdiff_t mlines(char **s, ptrdiff_t w)
 	ptrdiff_t perline;
 
 	for (x = 0, width = 0; s[x]; ++x) {
-		ptrdiff_t d = txtwidth(s[x],zlen(s[x]));
+		ptrdiff_t d = txtwidth(locale_map,s[x],zlen(s[x]));
 		if (d > width)
 			width = d;
 	}
@@ -174,7 +174,7 @@ static void mconfig(MENU *m)
 
 		m->top = 0;
 		for (x = 0, m->width = 0; m->list[x]; ++x) {
-			ptrdiff_t d = txtwidth(m->list[x],zlen(m->list[x]));
+			ptrdiff_t d = txtwidth(locale_map,m->list[x],zlen(m->list[x]));
 			if (d > m->width)
 				m->width = d;
 		}
@@ -570,7 +570,7 @@ static int umkey(W *w, int c)
 
 	if (c == '-' && m->func) {
 		if (m->func)
-			return m->func(m, m->cursor, m->object, -1);
+			return m->func(m, m->cursor, m->object, 2);
 		else
 			return -1;
 	}
@@ -641,7 +641,7 @@ void ldmenu(MENU *m, char **s, ptrdiff_t cursor)
 int menu_above;
 
 MENU *mkmenu(W *w, W *targ, char **s, int (*func)(MENU *m, ptrdiff_t cursor, void *object, int k),
-             int (*abrt)(W *w, ptrdiff_t cursor, void *object), int (*backs)(MENU *m, ptrdiff_t cursor, void *object), ptrdiff_t cursor, void *object, int *notify)
+             int (*abrt)(W *w, ptrdiff_t cursor, void *object), int (*backs)(MENU *m, ptrdiff_t cursor, void *object), ptrdiff_t cursor, void *object)
 {
 	W *neww;
 	MENU *m;
@@ -656,11 +656,9 @@ MENU *mkmenu(W *w, W *targ, char **s, int (*func)(MENU *m, ptrdiff_t cursor, voi
 			h = lines;
 	}
 
-	neww = wcreate(w->t, &watommenu, w, targ, targ->main, h, NULL, notify);
+	neww = wcreate(w->t, &watommenu, w, targ, targ->main, h, NULL);
 
 	if (!neww) {
-		if (notify)
-			*notify = 1;
 		return NULL;
 	}
 	w->t->curwin = neww;
@@ -681,6 +679,71 @@ MENU *mkmenu(W *w, W *targ, char **s, int (*func)(MENU *m, ptrdiff_t cursor, voi
 	return m;
 }
 
+/* Simplified menu */
+
+struct choose_result {
+	Coroutine t;
+	int answer;
+};
+
+int choose_cont(MENU *m, ptrdiff_t c, void *object,int flg)
+{
+	struct choose_result *r = (struct choose_result *)object;
+	m->object = NULL;
+	wabort(m->parent);
+	r->answer = c;
+	co_resume(&r->t, flg);
+	return 0;
+}
+
+int choose_abrt(W *w, ptrdiff_t c, void *object)
+{
+	if (object) {
+		struct choose_result *r = (struct choose_result *)object;
+		r->answer = c;
+		co_resume(&r->t, -1);
+	}
+	return -1;
+}
+
+int choose_baks(MENU *m, ptrdiff_t c, void *object)
+{
+	struct choose_result *r = (struct choose_result *)object;
+	m->object = NULL;
+	wabort(m->parent);
+	r->answer = c;
+	co_resume(&r->t, 3);
+	return -1;
+}
+
+/* Return value:
+    0 means return hit
+    1 means '1' hit
+    2 means '0' hit
+    -1 means ^C hit (menu abort)
+    3 means backspace hit
+    in all cases, final cursor position is recorded in *cursor
+*/
+
+int choose(W *w,				/* Menu goes below this window */
+           W *targ,				/* But menu is for this window */
+           char **s,				/* Array of menu items */
+           ptrdiff_t *cursor)			/* Cursor position in and out */
+{
+	struct choose_result t;
+	int ret;
+	MENU *m;
+	m = mkmenu(w, targ, s, choose_cont, choose_abrt, choose_baks, *cursor, &t);
+
+	if (!m)
+		return -1;
+
+	/* We get woken up when user hits a key */
+	ret = co_yield(&t.t, 0);
+	*cursor = t.answer;
+	return ret;
+}
+
 static char *cull(char *a, char *b)
 {
 	int x;
@@ -694,10 +757,10 @@ char *find_longest(char **lst)
 	char *com;
 	int x;
 
-	if (!lst || !aLEN(lst))
+	if (!valen(lst))
 		return vstrunc(NULL, 0);
 	com = vsncpy(NULL, 0, sv(lst[0]));
-	for (x = 1; x != aLEN(lst); ++x)
+	for (x = 1; x != valen(lst); ++x)
 		com = cull(com, lst[x]);
 	return com;
 }

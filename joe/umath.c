@@ -154,12 +154,14 @@ static double expr(int prec, int en,struct var **rtv, int secure)
 {
 	double x = 0.0, y, z;
 	struct var *v = NULL;
-	char ident[256];
-	char macr[256];
+	char *ident, *macr;
+	
+	ident = vsmk(0);
+	macr = vsmk(0);
 
 	parse_wsl(&ptr, '#');
 
-	if (!parse_ident(&ptr, ident, SIZEOF(ident))) {
+	if (!parse_ident(&ptr, &ident)) {
 		if (!secure && !zcmp(ident ,"joe")) {
 			v = 0;
 			x = 0.0;
@@ -278,9 +280,22 @@ static double expr(int prec, int en,struct var **rtv, int secure)
 			x = v->val;
 		}
 	} else if ((*ptr >= '0' && *ptr <= '9') || *ptr == '.') {
-		const char *eptr;
-		x = joe_strtod(ptr, &eptr);
-		ptr = eptr;
+		if (ptr[0] == '0' && ptr[1] == 'x') {
+			x = 0.0;
+			ptr += 2;
+			while ((*ptr >= '0' && *ptr <= '9') || (*ptr >= 'a' && *ptr <='f') ||
+			       (*ptr >= 'A' && *ptr <= 'F'))
+				if (*ptr >= '0' && *ptr <= '9')
+					x = x * 16.0 + *ptr++ - '0';
+				else if (*ptr >= 'a' && *ptr <= 'f')
+					x = x * 16.0 + *ptr++ - 'a' + 10;
+				else
+					x = x * 16.0 + *ptr++ - 'A' + 10;
+		} else {
+			const char *eptr;
+			x = joe_strtod(ptr,&eptr);
+			ptr = eptr;
+		}
 	} else if (*ptr == '(') {
 		++ptr;
 		x = expr(0, en, &v, secure);
@@ -1255,7 +1270,7 @@ double calc(BW *bw, char *s, int secure)
 	return eval(s, secure);
 }
 
-static void insert_commas(char *dst, char *src)
+static char *insert_commas(char *dst, char *src)
 {
 	int leading; /* Number of leading digits */
 	int trailing;
@@ -1279,50 +1294,47 @@ static void insert_commas(char *dst, char *src)
 		}
 	}
 	/* Second pass: copy while inserting */
+	dst = vstrunc(dst, 0);
 	s = src;
 	n = 0;
-	if (*s == '-') {
-		*dst++ = *s++;
-	} else if (*s == '+') {
-		*dst++ = *s++;
+	if (*s == '-' || *s == '+') {
+		dst = vsadd(dst, *s++);
 	}
 	while (*s >= '0' && *s <= '9') {
-		*dst++ = *s++;
+		dst = vsadd(dst, *s++);
 		--leading;
 		if (leading != 0 && (leading % 3 == 0))
-			*dst++ = '_';
+			dst = vsadd(dst, '_');
 	}
 	if (*s == '.') {
-		*dst++ = *s++;
+		dst = vsadd(dst, *s++);
 		while (*s >= '0' && *s <= '9') {
-			*dst++ = *s++;
+			dst = vsadd(dst, *s++);
 			++n;
 			if (n != trailing && (n % 3 == 0))
-				*dst++ = '_';
+				dst = vsadd(dst, '_');
 		}
 	}
 	while (*s) {
-		*dst++ = *s++;
+		dst = vsadd(dst, *s++);
 	}
-	*dst = 0;
+	
+	return dst;
 }
 
 /* Convert floating point ascii number into engineering format */
 
-static char *eng(char *d, ptrdiff_t d_len, const char *s)
+static char *eng(char *d, const char *s)
 {
 	const char *s_org = s;
-	char *d_org = d;
-	char a[128];
-	int a_len;
+	char *a = vsensure(NULL, 128);
 	int sign;
 	int dp;
 	int myexp;
 	int exp_sign;
 	int x;
+	int len;
 	int flg = 0;
-
-	--d_len; /* For terminator */
 
 	/* Get sign of number */
 	if (*s == '-') {
@@ -1341,9 +1353,8 @@ static char *eng(char *d, ptrdiff_t d_len, const char *s)
 		flg = 1;
 		++s;
 	}
-	a_len = 0;
 	while (*s >= '0' && *s <= '9') {
-		a[a_len++] = *s++;
+		a = vsadd(a, *s++);
 		flg = 1;
 	}
 	/* Decimal point? */
@@ -1352,7 +1363,7 @@ static char *eng(char *d, ptrdiff_t d_len, const char *s)
 		flg = 1;
 		++s;
 		/* If we don't have any digits yet, trim leading zeros */
-		if (!a_len) {
+		if (!vslen(a)) {
 			while (*s == '0') {
 				++s;
 				++dp;
@@ -1360,19 +1371,18 @@ static char *eng(char *d, ptrdiff_t d_len, const char *s)
 		}
 		if (*s >= '0' && *s <= '9') {
 			while (*s >= '0' && *s <= '9') {
-				a[a_len++] = *s++;
+				a = vsadd(a, *s++);
 				++dp;
 			}
 		} else {
 			/* No non-zero digits at all? */
-			dp  = 0;
+			dp = 0;
 		}
 	}
 	/* Trim trailing zeros */
-	while (a_len && a[a_len - 1] == '0') {
-		--a_len;
-		--dp;
-	}
+	for (len = vslen(a); len > 0 && a[len - 1] == 0; )
+		--len;
+	vstrunc(a, len);
 
 	/* Exponent? */
 	if (*s == 'e' || *s == 'E') {
@@ -1397,8 +1407,7 @@ static char *eng(char *d, ptrdiff_t d_len, const char *s)
 
 	/* s should be at end of number now */
 	if (!flg) { /* No digits found? */
-		zlcpy(d, d_len, s_org);
-		return d;
+		return vsncpy(d, 0, sz(s_org));
 	}
 
 	/* Sign of exponent */
@@ -1406,8 +1415,6 @@ static char *eng(char *d, ptrdiff_t d_len, const char *s)
 		myexp = -myexp;
 	/* Account of position of decimal point in exponent */
 	myexp -= dp;
-
-	a[a_len] = 0;
 
 	/* For engineering format, make exponent a multiple of 3 such that
 	   we have 1 - 3 leading digits */
@@ -1428,195 +1435,180 @@ static char *eng(char *d, ptrdiff_t d_len, const char *s)
 
 	/* Add zeros to mantissa to account for this */
 	while (x--) {
-		a[a_len++] = '0';
+		a = vsadd(a, '0');
 	}
 
 	/* If number has no digits, add one now */
-	if (!a_len)
-		a[a_len++] = '0';
+	if (!vslen(a))
+		a = vsadd(a, '0');
 
 	/* Position decimal point near the left */
-	dp = (a_len - 1) / 3;
+	dp = (vslen(a) - 1) / 3;
 	dp *= 3;
 
 	/* Adjust exponent for this */
 	myexp += dp;
 
 	/* Now print */
-	if (sign && d_len) {
-		*d++ = '-';
-		--d_len;
+	d = vstrunc(d, 0);
+	if (sign) {
+		d = vsadd(d, '-');
 	}
 
 	/* Digits to left of decimal point */
-	for (x = 0; x != a_len - dp; ++x) {
-		if (d_len) {
-			*d++ = a[x];
-			--d_len;
-		}
+	for (x = 0; x != vslen(a) - dp; ++x) {
+		d = vsadd(d, a[x]);
 	}
 
 	/* Any more digits? */
 	if (dp) {
-		if (d_len) {
-			*d++ = '.';
-			--d_len;
-		}
-		for (x = a_len - dp; x != a_len; ++x) {
-			if (d_len) {
-				*d++ = a[x];
-				--d_len;
-			}
+		d = vsadd(d, '.');
+		for (x = vslen(a) - dp; x != vslen(a); ++x) {
+			d = vsadd(d, a[x]);
 		}
 		/* Trim trailing zeros */
-		while (d != d_org && d[-1] == '0') {
-			--d;
-			++d_len;
-		}
+		for (len = vslen(d); d > 0 && d[len - 1] == '0'; )
+			--len;
+		d = vstrunc(d, len);
 	}
 
 	/* Exponent? */
 	if (myexp) {
-		joe_snprintf_1(d, (size_t)(d_len + 1), "e%d", myexp);
-	} else {
-		*d = 0;
+		d = vsfmt(sv(d), "e%d", myexp);
 	}
 
-	return d_org;
+	return d;
 }
 
 static int doumath(W *w, char *s, void *object, int *notify);
 
 /* Main user interface */
-static int domath(W *w, char *s, void *object, int *notify, int secure)
-{
-	char buf[128];
-	char buf1[128];
-	double result;
-	BW *bw;
-	WIND_BW(bw, w);
-	result = calc(bw, s, secure);
 
-	if (notify) {
-		*notify = 1;
-	}
-	if (merr) {
-		msgnw(bw->parent, merr);
-		return -1;
-	}
-	vsrm(s);
-	switch (mode_display) {
-		case 0: { /* Normal */
-			joe_snprintf_1(buf, SIZEOF(buf), "%.16G", result);
-			insert_commas(msgbuf, buf);
-			break;
-		} case 1: { /* Engineering */
-			joe_snprintf_1(buf1, SIZEOF(buf1), "%.16G", result);
-			eng(buf, sizeof(buf), buf1);
-			insert_commas(msgbuf, buf);
-			break;
-		} case 2: { /* Hex */
-#ifdef HAVE_LONG_LONG
-			unsigned long long n = (unsigned long long)result;
-#else
-			unsigned long n = (unsigned long)result;
-#endif
-			int ofst = 0;
-			int len = 0;
-			int cnt = 0;
-			msgbuf[ofst++] = '0';
-			msgbuf[ofst++] = 'x';
-			while (n) {
-				buf[len++] = "0123456789ABCDEF"[n & 15];
-				n >>= 4;
-			}
-			if (!len)
-				buf[len++] = '0';
-			cnt = len;
-			do {
-				if (len && cnt != len && (len & 3) == 0)
-					msgbuf[ofst++] = '_';
-				msgbuf[ofst++] = buf[len - 1];
-			} while (--len);
-			msgbuf[ofst] = 0;
-/*
-#ifdef HAVE_LONG_LONG
-			joe_snprintf_1(msgbuf, JOE_MSGBUFSIZE, "0x%llX", (long long)result);
-#else
-			joe_snprintf_1(msgbuf, JOE_MSGBUFSIZE, "0x%lX", (long)result);
-#endif
-*/
-			break;
-		} case 3: { /* Octal */
-#ifdef HAVE_LONG_LONG
-			unsigned long long n = (unsigned long long)result;
-#else
-			unsigned long n = (unsigned long)result;
-#endif
-			int ofst = 0;
-			int len = 0;
-			int cnt = 0;
-			msgbuf[ofst++] = '0';
-			msgbuf[ofst++] = 'o';
-			while (n) {
-				buf[len++] = "01234567"[n & 7];
-				n >>= 3;
-			}
-			if (!len)
-				buf[len++] = '0';
-			cnt = len;
-			do {
-				if (len && cnt != len && (len & 3) == 0)
-					msgbuf[ofst++] = '_';
-				msgbuf[ofst++] = buf[len - 1];
-			} while (--len);
-			msgbuf[ofst] = 0;
-/*
-#ifdef HAVE_LONG_LONG
-			joe_snprintf_1(msgbuf, JOE_MSGBUFSIZE, "0o%llo", (long long)result);
-#else
-			joe_snprintf_1(msgbuf, JOE_MSGBUFSIZE, "0o%lo", (long)result);
-#endif
-*/
-			break;
-		} case 4: { /* Binary */
-#ifdef HAVE_LONG_LONG
-			unsigned long long n = (unsigned long long)result;
-#else
-			unsigned long n = (unsigned long)result;
-#endif
-			int ofst = 0;
-			int len = 0;
-			int cnt = 0;
-			msgbuf[ofst++] = '0';
-			msgbuf[ofst++] = 'b';
-			while (n) {
-				buf[len++] = (char)('0' + (char)(n & 1));
-				n >>= 1;
-			}
-			if (!len)
-				buf[len++] = '0';
-			cnt = len;
-			do {
-				if (len && cnt != len && (len & 3) == 0)
-					msgbuf[ofst++] = '_';
-				msgbuf[ofst++] = buf[len - 1];
-			} while (--len);
-			msgbuf[ofst] = 0;
-			break;
+B *mathhist = NULL;
+
+int domath(W *w, int k, int secure)
+{
+	BW *bw;
+	char *s;
+	WIND_BW(bw, w);
+	
+	joe_set_signal(SIGFPE, fperr);
+	again:
+	
+	s = ask(w, "=", &mathhist, "Math", math_cmplt, utf8_map, 0, 0, NULL);
+	if (s) {
+		char buf[128];
+		char *disp = NULL;
+		double result = calc(bw, s, secure);
+
+		if (merr) {
+			msgnw(bw->parent, merr);
+			return -1;
 		}
-	}
+		switch (mode_display) {
+			case 0: { /* Normal */
+				joe_snprintf_1(buf, SIZEOF(buf), "%.16G", result);
+				disp = insert_commas(disp, buf);
+				break;
+			} case 1: { /* Engineering */
+				char *e = vsensure(NULL, 128);
+				joe_snprintf_1(buf, SIZEOF(buf), "%.16G", result);
+				e = eng(e, buf);
+				disp = insert_commas(disp, e);
+				break;
+			} case 2: { /* Hex */
+#ifdef HAVE_LONG_LONG
+				unsigned long long n = (unsigned long long)result;
+#else
+				unsigned long n = (unsigned long)result;
+#endif
+				int len = 0;
+				int cnt = 0;
+				disp = vsncpy(sv(disp), sc("0x"));
+				while (n) {
+					buf[len++] = "0123456789ABCDEF"[n & 15];
+					n >>= 4;
+				}
+				if (!len)
+					buf[len++] = '0';
+				cnt = len;
+				do {
+					if (len && cnt != len && (len & 3) == 0)
+						disp = vsadd(disp, '_');
+					disp = vsadd(disp, buf[len - 1]);
+				} while (--len);
+/*
+#ifdef HAVE_LONG_LONG
+				joe_snprintf_1(buf, sizeof(buf), "0x%llX", (long long)result);
+#else
+				joe_snprintf_1(buf, sizeof(buf), "0x%lX", (long)result);
+#endif
+*/
+				break;
+			} case 3: { /* Octal */
+#ifdef HAVE_LONG_LONG
+				unsigned long long n = (unsigned long long)result;
+#else
+				unsigned long n = (unsigned long)result;
+#endif
+				int len = 0;
+				int cnt = 0;
+				disp = vsncpy(sv(disp), sc("0o"));
+				while (n) {
+					buf[len++] = "01234567"[n & 7];
+					n >>= 3;
+				}
+				if (!len)
+					buf[len++] = '0';
+				cnt = len;
+				do {
+					if (len && cnt != len && (len & 3) == 0)
+						disp = vsadd(disp, '_');
+					disp = vsadd(disp, buf[len - 1]);
+				} while (--len);
+/*
+#ifdef HAVE_LONG_LONG
+				joe_snprintf_1(msgbuf, JOE_MSGBUFSIZE, "0o%llo", (long long)result);
+#else
+				joe_snprintf_1(msgbuf, JOE_MSGBUFSIZE, "0o%lo", (long)result);
+#endif
+*/
+				break;
+			} case 4: { /* Binary */
+#ifdef HAVE_LONG_LONG
+				unsigned long long n = (unsigned long long)result;
+#else
+				unsigned long n = (unsigned long)result;
+#endif
+				int len = 0;
+				int cnt = 0;
+				disp = vsncpy(sv(disp), sc("0b"));
+				while (n) {
+					buf[len++] = (char)('0' + (char)(n & 1));
+					n >>= 1;
+				}
+				if (!len)
+					buf[len++] = '0';
+				cnt = len;
+				do {
+					if (len && cnt != len && (len & 3) == 0)
+						disp = vsadd(disp, '_');
+					disp = vsadd(disp, buf[len - 1]);
+				} while (--len);
+				break;
+			}
+		}
 		
-	if (bw->parent->watom->what != TYPETW || mode_ins) {
-		binsm(bw->cursor, sz(msgbuf));
-		pfwrd(bw->cursor, zlen(msgbuf));
-		bw->cursor->xcol = piscol(bw->cursor);
-	} else {
-		msgnw(bw->parent, msgbuf);
-	}
+		if (bw->parent->watom->what != TYPETW || mode_ins) {
+			binsm(bw->cursor, sv(disp));
+			pfwrd(bw->cursor, vslen(disp));
+			bw->cursor->xcol = piscol(bw->cursor);
+		} else {
+			msgnw(bw->parent, disp);
+		}
 	if (mode_ins) { /* Exit if we are inserting */
 		mode_ins = 0;
-		return 0;
+		goto again;
 	} else {
 		return 0;
 #ifdef junk
@@ -1628,20 +1620,12 @@ static int domath(W *w, char *s, void *object, int *notify, int secure)
 		}
 #endif
 	}
+
+		return 0;
+	} else {
+		return -1;
+	}
 }
-
-static int doumath(W *w, char *s, void *object, int *notify)
-{
-	return domath(w, s, object, notify, 0);
-}
-
-static int dosmath(W *w, char *s, void *object, int *notify)
-{
-	return domath(w, s, object, notify, 1);
-}
-
-
-B *mathhist = NULL;
 
 static char **math_word_list;
 
@@ -1672,22 +1656,12 @@ int math_cmplt(BW *bw, int k)
 
 int umath(W *w, int k)
 {
-	joe_set_signal(SIGFPE, fperr);
-	if (wmkpw(w, "=", &mathhist, doumath, "Math", NULL, math_cmplt, NULL, NULL, utf8_map, 0)) {
-		return 0;
-	} else {
-		return -1;
-	}
+	return domath(w, k, 0);
 }
 
 /* Secure version: no macros allowed */
 
 int usmath(W *w, int k)
 {
-	joe_set_signal(SIGFPE, fperr);
-	if (wmkpw(w, "=", &mathhist, dosmath, "Math", NULL, math_cmplt, NULL, NULL, utf8_map, 0)) {
-		return 0;
-	} else {
-		return -1;
-	}
+	return domath(w, k, 1);
 }
