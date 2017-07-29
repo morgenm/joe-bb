@@ -35,6 +35,9 @@ void set_current_dir(BW *bw, char *s,int simp)
 		if (simp) {
 			b->current_dir = simplify_prefix(b->current_dir);
 		}
+#ifdef JOEWIN
+		b->current_dir = dequotevs(b->current_dir);
+#endif
 	}
 	else
 		b->current_dir = 0;
@@ -166,6 +169,9 @@ static int rtnpw(W *w)
 
 	if (pw->file_prompt) {
 		s = canonical(s);
+#ifdef JOEWIN
+		s = dequotevs(s);
+#endif
 	}
 
 	/* Save text into history buffer */
@@ -326,7 +332,7 @@ char **regsub(char **z, ptrdiff_t len, char *s)
 	int x;
 
 	for (x = 0; x != len; ++x)
-		if (rmatch(s, z[x]))
+		if (rmatch(s, z[x], 0))
 			lst = vaadd(lst, vsncpy(NULL, 0, sz(z[x])));
 	return lst;
 }
@@ -559,7 +565,7 @@ char *ask(W *w,			/* Prompt goes below this window */
           const char *prompt,		/* Prompt text */
           B **history,			/* History buffer to use */
           char *huh,			/* Name of help screen for this prompt */
-          int (*tab)(),		/* Called when tab key is pressed */
+          int (*tab)(BW *, int),	/* Called when tab key is pressed */
           struct charmap *map,		/* Character map for prompt */
           int file_prompt,		/* Set for file-name tilde expansion */
           int retrieve_last,		/* Set for cursor to go on last line of history */

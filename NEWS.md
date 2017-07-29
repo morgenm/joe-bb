@@ -8,9 +8,7 @@
 
 [Build instructions](https://sourceforge.net/p/joe-editor/mercurial/ci/default/tree/INSTALL.md)
 
-### JOE.next (not yet released changes in Mercurial)
-
-* Enhancements
+### JOE 4.4
 
 	* Now pass character which invoked a macro to each macro step and
 	  call.  If a macro step happens to be the 'type' command, the
