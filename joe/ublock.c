@@ -595,10 +595,8 @@ int ublkcpy(W *w, int k)
 /* Write highlighted block to a file */
 /* This is called by ublksave in ufile.c */
 
-/*int dowrite(BW *bw, char *s, void *object, int *notify)
+/*int dowrite(BW *bw, unsigned char *s, void *object)
 {
-	if (notify)
-		*notify = 1;
 	if (markv(1)) {
 		if (square) {
 			int fl;
@@ -880,87 +878,138 @@ int ulindent(W *w, int k)
 
 /* Insert a file */
 
-int doinsf(W *w, char *s, void *object, int *notify)
+int uinsf(W *w, int k)
 {
 	BW *bw;
+	char *s;
 	WIND_BW(bw, w);
-	if (notify)
-		*notify = 1;
-	if (square)
-		if (markv(2)) {
-			B *tmp;
-			off_t width = markk->xcol - markb->xcol;
-			off_t height;
-			int usetabs = ptabrect(markb,
-					       markk->line - markb->line + 1,
-					       markk->xcol);
+	
+	s = ask(w, joe_gettext(_("Name of file to insert (%{help} for help): ")), &filehist,
+	        "Names", cmplt_file_in, locale_map, 3, 0, NULL);
+	if (s) {
+		if (square)
+			if (markv(1)) {
+				B *tmp;
+				off_t width = markk->xcol - markb->xcol;
+				off_t height;
+				int usetabs = ptabrect(markb,
+						       markk->line - markb->line + 1,
+						       markk->xcol);
 
-			tmp = bload(s);
-			if (berror) {
-				msgnw(bw->parent, joe_gettext(msgs[-berror]));
+				tmp = bload(s);
+				if (berror) {
+					msgnw(bw->parent, joe_gettext(msgs[-berror]));
+					brm(tmp);
+					return -1;
+				}
+				if (piscol(tmp->eof))
+					height = tmp->eof->line + 1;
+				else
+					height = tmp->eof->line;
+				if (bw->o.overtype) {
+					pclrrect(markb, off_max(markk->line - markb->line + 1, height), markk->xcol, usetabs);
+					pdelrect(markb, height, width + markb->xcol);
+				}
+				pinsrect(markb, tmp, width, usetabs);
+				pdupown(markb, &markk, "doinsf");
+				markk->xcol = markb->xcol;
+				if (height) {
+					pline(markk, markk->line + height - 1);
+					pcol(markk, markb->xcol + width);
+					markk->xcol = markb->xcol + width;
+				}
 				brm(tmp);
+				updall();
+				return 0;
+			} else {
+				msgnw(bw->parent, joe_gettext(_("No block")));
 				return -1;
-			}
-			if (piscol(tmp->eof))
-				height = tmp->eof->line + 1;
-			else
-				height = tmp->eof->line;
-			if (bw->o.overtype) {
-				pclrrect(markb, off_max(markk->line - markb->line + 1, height), markk->xcol, usetabs);
-				pdelrect(markb, height, width + markb->xcol);
-			}
-			pinsrect(markb, tmp, width, usetabs);
-			pdupown(markb, &markk, "doinsf");
-			markk->xcol = markb->xcol;
-			if (height) {
-				pline(markk, markk->line + height - 1);
-				pcol(markk, markb->xcol + width);
-				markk->xcol = markb->xcol + width;
-			}
-			brm(tmp);
-			updall();
-			return 0;
 		} else {
-			msgnw(bw->parent, joe_gettext(_("No block")));
-			return -1;
-	} else {
-		int ret = 0;
-		B *tmp = bload(s);
+			int ret = 0;
+			B *tmp = bload(s);
 
-		if (berror) {
-			msgnw(bw->parent, joe_gettext(msgs[-berror])), brm(tmp);
-			ret = -1;
-		} else
-			binsb(bw->cursor, tmp);
-		vsrm(s);
-		bw->cursor->xcol = piscol(bw->cursor);
-		return ret;
+			if (berror) {
+				msgnw(bw->parent, joe_gettext(msgs[-berror])), brm(tmp);
+				ret = -1;
+			} else
+				binsb(bw->cursor, tmp);
+			bw->cursor->xcol = piscol(bw->cursor);
+			return ret;
+		}
+		return 0;
+	} else {
+		return -1;
 	}
 }
-
 
 /* Filter highlighted block through a UNIX command */
 
 static int filtflg = 0;
 
-static int dofilt(W *w, char *s, void *object, int *notify)
+static B *filthist = NULL;
+
+static void markall(BW *bw)
 {
+	pdupown(bw->cursor->b->bof, &markb, "markall");
+	markb->xcol = 0;
+	pdupown(bw->cursor->b->eof, &markk, "markall");
+	markk->xcol = piscol(markk);
+	updall();
+}
+
+static int checkmark(BW *bw)
+{
+	if (!markv(1))
+		if (square)
+			return 2;
+		else {
+			markall(bw);
+			filtflg = 1;
+			return 1;
+	} else {
+		filtflg = 0;
+		return 0;
+	}
+}
+
+int ufilt(W *w, int k)
+{
+#ifdef __MSDOS__
+	msgnw(bw->parent, joe_gettext(_("Sorry, no sub-processes in DOS (yet)")));
+	return -1;
+#else
 	int fr[2];
 	int fw[2];
 	int flg = 0;
+	const char *s;
 	BW *bw;
+	
 	WIND_BW(bw, w);
+	
+	switch (checkmark(bw)) {
+		case 0:
+			s = joe_gettext(_("Command to filter block through (%{abort} to abort): "));
+			break;
+		case 1:
+			s = joe_gettext(_("Command to filter file through (%{abort} to abort): "));
+			break;
+		default:
+			msgnw(bw->parent, joe_gettext(_("No block")));
+			return -1;
+	}
+	s = ask(w, s, &filthist, NULL, cmplt_command, locale_map, 0, 0, NULL);
 
-	if (notify)
-		*notify = 1;
+	if (!s)
+		return -1;
 	if (markb && markk && !square && markb->b == bw->b && markk->b == bw->b && markb->byte == markk->byte) {
-		flg = 1;
+		flg = 1; /* Empty block */
 		goto ok;
-	} if (!markv(1)) {
+	}
+	if (!markv(1)) {
 		msgnw(bw->parent, joe_gettext(_("No block")));
 		return -1;
 	}
-      ok:
+	ok:
 	if (markb->b!=bw->b && !modify_logic(bw,markb->b))
 		return -1;
 
@@ -998,11 +1047,10 @@ static int dofilt(W *w, char *s, void *object, int *notify)
 #ifdef HAVE_PUTENV
 		fname = vsncpy(NULL, 0, sc("JOE_FILENAME="));
 		name = bw->b->name ? bw->b->name : "Unnamed";
-		if((len = slen(name)) >= 512)	/* limit filename length */
+		if((len = zlen(name)) >= 512)	/* limit filename length */
 			len = 512;
 		fname = vsncpy(sv(fname), name, len);
 		putenv(fname);
-		vsrm(fname);
 #endif
 		execl("/bin/sh", "/bin/sh", "-c", s, NULL);
 		_exit(0);
@@ -1075,64 +1123,11 @@ static int dofilt(W *w, char *s, void *object, int *notify)
 		close(fw[1]);
 		_exit(0);
 	}
-	vsrm(s);
 	ttopnn();
 	if (filtflg)
 		unmark(bw->parent, 0);
 	bw->cursor->xcol = piscol(bw->cursor);
 	return 0;
-}
-
-static B *filthist = NULL;
-
-static void markall(BW *bw)
-{
-	pdupown(bw->cursor->b->bof, &markb, "markall");
-	markb->xcol = 0;
-	pdupown(bw->cursor->b->eof, &markk, "markall");
-	markk->xcol = piscol(markk);
-	updall();
-}
-
-static int checkmark(BW *bw)
-{
-	if (!markv(1))
-		if (square)
-			return 2;
-		else {
-			markall(bw);
-			filtflg = 1;
-			return 1;
-	} else {
-		filtflg = 0;
-		return 0;
-	}
-}
-
-int ufilt(W *w, int k)
-{
-	BW *bw;
-	WIND_BW(bw, w);
-#ifdef __MSDOS__
-	msgnw(bw->parent, joe_gettext(_("Sorry, no sub-processes in DOS (yet)")));
-	return -1;
-#else
-	switch (checkmark(bw)) {
-	case 0:
-		if (wmkpw(bw->parent, joe_gettext(_("Command to filter block through (%{abort} to abort): ")), &filthist, dofilt, NULL, NULL, cmplt_command, NULL, NULL, locale_map, 1))
-			return 0;
-		else
-			return -1;
-	case 1:
-		if (wmkpw(bw->parent, joe_gettext(_("Command to filter file through (%{abort} to abort): ")), &filthist, dofilt, NULL, NULL, cmplt_command, NULL, NULL, locale_map, 1))
-			return 0;
-		else
-			return -1;
-	case 2:
-	default:
-		msgnw(bw->parent, joe_gettext(_("No block")));
-		return -1;
-	}
 #endif
 }
 

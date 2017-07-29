@@ -7,50 +7,7 @@
  */
 #include "types.h"
 
-/* Calculate number of lines needed for a given prompt string and a given window width.
-   Also this finds the nth line and returns the position of the substring which is
-   that line. Set n to -1 if you just want the height. */
-
-static ptrdiff_t break_height(struct charmap *map,const char **src,ptrdiff_t *src_len,ptrdiff_t wid,ptrdiff_t n)
-{
-	const char *s = *src;
-	ptrdiff_t len = *src_len;
-	ptrdiff_t h = 1; /* Number of lines */
-	ptrdiff_t col = 0; /* Current column */
-	ptrdiff_t x = 0; /* Offset into string */
-	ptrdiff_t start_of_line = 0; /* Start of most recent line */
-	while (x != len) {
-		ptrdiff_t space = 0;
-		ptrdiff_t word = 0;
-		ptrdiff_t start = x;
-		ptrdiff_t start_word;
-		while (x != len && s[x] == ' ') {
-			++space;
-			++x;
-		}
-		start_word = x;
-		while (x != len && s[x] != ' ') {
-			++x;
-		}
-		word = joe_wcswidth(map, s + start_word, x - start_word);
-		if (col + space + word < wid || !col) {
-			/* Leading space and word fit on current line */
-			col += space + word;
-		} else {
-			/* They don't fit, start a new line */
-			if (!n--) {
-				x = start;
-				break;
-			}
-			++h;
-			col = word;
-			start_of_line = start_word;
-		}
-	}
-	*src = s + start_of_line;
-	*src_len = x - start_of_line;
-	return h;
-}
+/* Event handler: display query window */
 
 static void dispqw(W *w, int flg)
 {
@@ -75,46 +32,26 @@ static void dispqw(W *w, int flg)
 		         w->w - w->x,
 		         1,NULL);
 		w->cury = y;
-		w->curx = w->x + joe_wcswidth(locale_map, s, l);
+		w->curx = w->x + txtwidth(locale_map, s, l);
 	}
 }
 
+/* Display query window: leave cursor in target window */
+
 static void dispqwn(W *w, int flg)
 {
-	QW *qw = (QW *)w->object;
-	ptrdiff_t y;
-
 	if (w->win->h) {
 		/* Set cursor position */
 		if (w->win->watom->follow && w->win->object)
 			w->win->watom->follow(w->win);
 		if (w->win->watom->disp && w->win->object)
 			w->win->watom->disp(w->win, 1);
+
+		dispqw(w, flg);
 		w->curx = w->win->curx;
 		w->cury = w->win->cury + w->win->y - w->y;
-	}
-
-	/* Generate prompt */
-	for (y = 0; y != w->h; ++y) {
-		const char *s = qw->prompt;
-		ptrdiff_t l = qw->promptlen;
-		break_height(locale_map, &s, &l, qw->org_w, y);
-		w->t->t->updtab[w->y + y] = 1;
-		genfield(w->t->t,
-		         w->t->t->scrn + (w->y + y) * w->t->t->co + w->x,
-		         w->t->t->attr + (w->y + y) * w->t->t->co + w->x,
-		         w->x,
-		         w->y + y,
-		         0,
-		         s,
-		         l,
-		         BG_COLOR(bg_prompt),
-		         w->w - w->x,
-		         1,NULL);
-		if (!w->win->h) {
-			w->cury = y;
-			w->curx = w->x + joe_wcswidth(locale_map, s, l);
-		}
+	} else {
+		dispqw(w, flg);
 	}
 }
 
@@ -123,36 +60,35 @@ static void dispqwn(W *w, int flg)
 static int utypeqw(W *w, int c)
 {
 	QW *qw = (QW *)w->object;
-	W *win;
-	int *notify = w->notify;
-	int (*func)(W *w, int k, void *object, int *notify);
-	void *object = qw->object;
-
-	win = qw->parent->win;
-	func = qw->func;
-	vsrm(qw->prompt);
+	struct query_result *r;
+	int flg = qw->flg;
+	r = qw->result;
+	obj_free(qw->prompt);
 	joe_free(qw);
 	w->object = NULL;
-	w->notify = NULL;
 	wabort(w);
-	if (func)
-		return func(win, c, object, notify);
-	return -1;
+	r->answer = c;
+	if (flg & QW_NOMACRO) {
+		co_sched(&r->t, 0);
+		return 0;
+	} else
+		return co_resume(&r->t, 0);
 }
 
 static int abortqw(W *w)
 {
 	QW *qw = (QW *)w->object;
-	W *win = w->win;
-	void *object = qw->object;
-	int (*abrt)(W *w, void *object) = qw->abrt;
+	struct query_result *r = qw->result;
+	int flg = qw->flg;
 
-	vsrm(qw->prompt);
+	obj_free(qw->prompt);
 	joe_free(qw);
-	if (abrt)
-		return abrt(win, object);
-	else
+	r->answer = -1;
+	if (flg & QW_NOMACRO) {
+		co_sched(&r->t, -1);
 		return -1;
+	} else
+		return co_resume(&r->t, -1);
 }
 
 static WATOM watomqw = {
@@ -197,94 +133,47 @@ static WATOM watqwsr = {
 	TYPEQW
 };
 
-/* Create a query window */
-
-QW *mkqw(W *w, const char *prompt, ptrdiff_t len, int (*func) (W *w, int k, void *object, int *notify), int (*abrt)(W *w, void *object), void *object, int *notify)
+int query(W *w,				/* Prompt goes below this window */
+          const char *prompt,		/* Prompt text */
+          int len,			/* Length of prompt text */
+          int flg)			/* Options: 0 = normal, 1 = cursor left in original,
+						    2 = same as 1, but QW type code is different. */
 {
-	W *neww;
+	struct query_result t;
 	QW *qw;
-	const char *s = prompt;
+	W *n;
+	WATOM *a = &watomqw;
 	ptrdiff_t l = len;
+	const char *s = prompt;
 	ptrdiff_t h = break_height(locale_map, &s, &l, w->w, -1);
-
-	neww = wcreate(w->t, &watomqw, w, w, w->main, h, NULL, notify);
-	if (!neww) {
-		if (notify)
-			*notify = 1;
-		return NULL;
+	
+	a = &watomqw;
+	if (flg & QW_STAY)
+		a = &watqwn;
+	if (flg & QW_SR)
+		a = &watqwsr;
+	n = wcreate(w->t, a, w, w, w->main, h, NULL);
+	if (!n) {
+		return -1;
 	}
-	w->t->curwin = neww;
-	wfit(neww->t);
-	neww->object = (void *) (qw = (QW *) joe_malloc(SIZEOF(QW)));
-	qw->parent = neww;
+
+	w->t->curwin = n;
+	wfit(n->t);
+	n->object = (void *) (qw = (QW *) joe_malloc(SIZEOF(QW)));
+	qw->parent = n;
 	qw->prompt = vsncpy(NULL, 0, prompt, len);
+	obj_perm(qw->prompt);
 	qw->promptlen = len;
 	qw->org_w = w->w;
 	qw->org_h = h;
-	qw->func = func;
-	qw->abrt = abrt;
-	qw->object = object;
-	return qw;
-}
+	qw->result = &t;
+	qw->flg = flg;
 
-/* Same as above, but cursor is left in original window */
-/* For Ctrl-Meta thing */
-
-QW *mkqwna(W *w, const char *prompt, ptrdiff_t len, int (*func) (W *w, int k, void *object, int *notify), int (*abrt)(W *w, void *object), void *object, int *notify)
-{
-	W *neww;
-	QW *qw;
-	const char *s = prompt;
-	ptrdiff_t l = len;
-	ptrdiff_t h = break_height(locale_map, &s, &l, w->w, -1);
-
-	neww = wcreate(w->t, &watqwn, w, w, w->main, h, NULL, notify);
-	if (!neww) {
-		if (notify)
-			*notify = 1;
-		return NULL;
-	}
-	w->t->curwin = neww;
-	wfit(neww->t);
-	neww->object = (void *) (qw = (QW *) joe_malloc(SIZEOF(QW)));
-	qw->parent = neww;
-	qw->prompt = vsncpy(NULL, 0, prompt, len);
-	qw->promptlen = len;
-	qw->org_w = w->w;
-	qw->org_h = h;
-	qw->func = func;
-	qw->abrt = abrt;
-	qw->object = object;
-	return qw;
-}
-
-/* Same as above, but cursor is left in original window */
-/* For search and replace thing */
-
-QW *mkqwnsr(W *w, const char *prompt, ptrdiff_t len, int (*func) (W *w, int k, void *object, int *notify), int (*abrt) (W *w, void *object), void *object, int *notify)
-{
-	W *neww;
-	QW *qw;
-	const char *s = prompt;
-	ptrdiff_t l = len;
-	ptrdiff_t h = break_height(locale_map, &s, &l, w->w, -1);
-
-	neww = wcreate(w->t, &watqwsr, w, w, w->main, h, NULL, notify);
-	if (!neww) {
-		if (notify)
-			*notify = 1;
-		return NULL;
-	}
-	w->t->curwin = neww;
-	wfit(neww->t);
-	neww->object = (void *) (qw = (QW *) joe_malloc(SIZEOF(QW)));
-	qw->parent = neww;
-	qw->prompt = vsncpy(NULL, 0, prompt, len);
-	qw->promptlen = len;
-	qw->org_w = w->w;
-	qw->org_h = h;
-	qw->func = func;
-	qw->abrt = abrt;
-	qw->object = object;
-	return qw;
+	/* We get woken up when user hits a key */
+	t.answer = -1;
+	if (flg & QW_NOMACRO)
+		co_suspend(&t.t, 0);
+	else
+		co_yield(&t.t, 0);
+	return t.answer;
 }

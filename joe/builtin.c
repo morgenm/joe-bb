@@ -42,23 +42,27 @@ int jfclose(JFILE *f)
 	return rtn;
 }
 
-char *jfgets(char *buf,int len,JFILE *f)
+char *jfgets(char **buf,JFILE *f)
 {
 	if (f->f)
-		return fgets(buf, len, f->f);
+		return vsgets(buf, f->f);
 	else {
+		char *b = *buf;
+		b = vstrunc(b, 0);
 		if (f->p[0]) {
 			ptrdiff_t x;
 			for (x = 0; f->p[x] && f->p[x] != '\n'; ++x)
-				buf[x] = f->p[x];
+				b = vsadd(b, f->p[x]);
 			if (f->p[x] == '\n') {
-				buf[x++] = '\n';
+				++x;
 			}
-			buf[x] = 0;
 			f->p += x;
-			return buf;
-		} else
+			*buf = b;
+			return b;
+		} else {
+			*buf = b;
 			return 0;
+		}
 	}
 }
 
