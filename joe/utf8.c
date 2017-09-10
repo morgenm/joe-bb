@@ -7,6 +7,8 @@
  */
 #include "types.h"
 
+#ifndef JOEWIN
+#endif
 /* If we didn't find a CODESET in locale.h/langinfo.h, forget about setlocale */
 #ifndef CODESET
 #undef HAVE_SETLOCALE

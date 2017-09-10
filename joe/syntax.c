@@ -8,6 +8,11 @@
 
 #include "types.h"
 
+#ifdef JOEWIN
+#include "jwcolors.h"
+struct jwcolors *currentscheme = NULL;
+#endif
+
 /* Parse one line.  Returns new state.
    'syntax' is the loaded syntax definition for this buffer.
    'line' is advanced to start of next line.
@@ -607,6 +612,99 @@ static struct high_param *parse_params(struct high_param *current_params,const c
 	return params;
 }
 
+#ifdef JOEWIN
+
+/* Load JOEWIN color scheme */
+
+void applyscheme(struct jwcolors *colors)
+{
+	struct high_syntax *syntax;
+
+	/* This function always gets a fresh, unreferenced copy of the scheme */
+	if (currentscheme)
+	{
+		freecolorscheme(currentscheme);
+	}
+
+	currentscheme = colors;
+
+	/* First reset any syntaxes we may have touched */
+	for (syntax = syntax_list; syntax; syntax = syntax->next)
+	{
+		struct high_color *color;
+
+		for (color = syntax->color; color; color = color->next)
+		{
+			color->color = color->defaultcolor;
+		}
+	}
+
+	/* Load scheme into existing syntaxes */
+	for (syntax = syntax_list; syntax; syntax = syntax->next)
+	{
+		int i;
+
+		/* Reload colors */
+		if (currentscheme)
+		{
+			struct high_color *color;
+			for (color = syntax->color; color; color = color->next)
+			{
+				struct jwsyntaxcolor *scolor;
+
+				scolor = searchsyntaxcolor(currentscheme, (char*)syntax->name, (char*)color->name);
+				if (!scolor)
+				{
+					scolor = searchsyntaxcolor(currentscheme, "", (char*)color->name);
+				}
+
+				if (scolor)
+				{
+					color->color = convertjwsyncolor(scolor);
+				}
+			}
+		}
+
+		/* Reload state->color mappings */
+		for (i = 0; i < syntax->nstates; i++)
+		{
+			struct high_state *state = syntax->states[i];
+			if (state && state->colorp)
+			{
+				state->color = state->colorp->color;
+			}
+		}
+	}
+
+	/* Update the statusbar and selection colors (if they are defined in the scheme) */
+
+	if (iscolordefined(colors, STATUS_BG_CODE) && iscolordefined(colors, STATUS_FG_CODE))
+	{
+		/* These look backwards, but keep in mind the status line is typically inverted */
+		bg_stalin = BG_NOT_DEFAULT | FG_NOT_DEFAULT | (STATUS_FG_CODE << BG_SHIFT) | (STATUS_BG_CODE << FG_SHIFT);
+	} else {
+		bg_stalin = bg_text;
+	}
+
+	if (iscolordefined(colors, SELECTION_BG_CODE))
+	{
+		selectmask = ~BG_MASK;
+		selectatr = BG_NOT_DEFAULT | (SELECTION_BG_CODE << BG_SHIFT);
+
+		if (iscolordefined(colors, SELECTION_FG_CODE))
+		{
+			selectmask &= ~FG_MASK;
+			selectatr |= FG_NOT_DEFAULT | (SELECTION_FG_CODE << FG_SHIFT);
+		}
+	}
+	else
+	{
+		selectmask = ~INVERSE;
+		selectatr = INVERSE;
+	}
+}
+
+#endif
 
 struct high_syntax *load_syntax_subr(const char *name,char *subr,struct high_param *params);
 
@@ -662,7 +760,7 @@ static int parse_options(struct high_syntax *syntax,struct high_cmd *cmd,JFILE *
 		} else if(!parsing_strings && (!zcmp(bf,"strings") || !zcmp(bf,"istrings"))) {
 			if (bf[0]=='i')
 				cmd->ignore = 1;
-			while(jfgets(&buf,f)) {
+			while(jfgets(&buf, f)) {
 				++line;
 				p = buf;
 				parse_ws(&p,'#');
@@ -737,25 +835,31 @@ static struct high_state *load_dfa(struct high_syntax *syntax)
 	/* Load it */
 	p = getenv("HOME");
 	if (p) {
+#ifndef JOEWIN
 		name = vsfmt(name, 0, "%s/.joe/syntax/%s.jsf",p,syntax->name);
-		f = jfopen(name,"r");
+#else
+		name = vsfmt(name, 0, "%s\\syntax\\%s.jsf", p, syntax->name);
+#endif
+		f = jfopen(name, "r");
 	}
 
 	if (!f) {
 		name = vsfmt(name, 0, "%ssyntax/%s.jsf",JOEDATA,syntax->name);
-		f = jfopen(name,"r");
+		f = jfopen(name, "r");
 	}
+
 	if (!f) {
 		name = vsfmt(name, 0, "*%s.jsf",syntax->name);
-		f = jfopen(name,"r");
+		f = jfopen(name, "r");
 	}
+
 	if (!f) {
 		obj_free(name);
 		return 0;
 	}
 
 	/* Parse file */
-	while(jfgets(&buf,f)) {
+	while (jfgets(&buf, f)) {
 		++line;
 		p = buf;
 		c = parse_ws(&p,'#');
