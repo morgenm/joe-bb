@@ -48,7 +48,7 @@ OPTIONS pdefault = {
 	0,		/* french spacing */
 	0,		/* flowed text */
 	0,		/* spaces */
-#ifdef __MSDOS__
+#if defined(__MSDOS__) || defined(JOEWIN)
 	1,		/* crlf */
 #else
 	0,		/* crlf */
@@ -112,7 +112,7 @@ OPTIONS fdefault = {
 	0,		/* french spacing */
 	0,		/* flowed text */
 	0,		/* spaces */
-#ifdef __MSDOS__
+#if defined(__MSDOS__) || defined(JOEWIN)
 	1,		/* crlf */
 #else
 	0,		/* crlf */
@@ -246,7 +246,7 @@ void setopt(B *b, const char *parsed_name)
 	for (o = options_list; o; o = o->next) {
 		struct options_match *match;
 		for (match = o->match; match; match = match->next) {
-			if (rmatch(match->name_regex, parsed_name)) {
+			if (rmatch(match->name_regex, parsed_name, 0)) {
 				if(match->contents_regex) {
 					P *p = pdup(b->bof, "setopt");
 					if (!match->r_contents_regex)

@@ -29,7 +29,7 @@ void mouseopen();	/* initialize mouse */
 void mouseclose();	/* de-initialize mouse */
 
 /* mousedn(int x, int y, int middle) - handle a mouse-down event */
-void mousedn(ptrdiff_t x, ptrdiff_t y, int middle);
+void mousedn(ptrdiff_t x, ptrdiff_t y);
 
 /* mousednmiddle(BW *bw, int x, int y) - handle a mouse-middlebutton-down event */ 
 void mousednmiddle PARAMS((BW *bw, int x, int y));
@@ -55,6 +55,10 @@ int udefm3up(W *, int);
 int udefm3drag(W *, int);
 int udefmiddledown(W *, int);
 int udefmiddleup(W *, int);
+int udefmiddledrag(W *, int);
+int udefmrdown (W *, int);
+int udefmrup (W *, int);
+int udefmrdrag (W *, int);
 
 long mnow();
 void reset_trig_time();
