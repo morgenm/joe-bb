@@ -172,6 +172,7 @@ char **vatrunc(char **vary, int len);
 char **vaadd(char **vary, char *s);
 
 void vasort(char **vary, int len);
+void vaisort(char **vary, int len);
 
 void vadel(char **a, ptrdiff_t ofst, ptrdiff_t len);
 

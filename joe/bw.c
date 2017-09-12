@@ -1074,7 +1074,7 @@ static struct file_pos *find_file_pos(const char *name)
 {
 	struct file_pos *p;
 	for (p = file_pos.link.next; p != &file_pos; p = p->link.next)
-		if (!zcmp(p->name, name)) {
+		if (!fullfilecmp(p->name, name)) {
 			promote(struct file_pos,link,&file_pos,p);
 			return p;
 		}
@@ -1113,12 +1113,29 @@ void save_file_pos(FILE *f)
 {
 	struct file_pos *p;
 	for (p = file_pos.link.prev; p != &file_pos; p = p->link.prev) {
+#ifdef JOEWIN
+		wchar_t wpath[MAX_PATH + 1];
+		char zpath[PATH_MAX + 1];
+
 #ifdef HAVE_LONG_LONG
 		fprintf(f,"	%lld ",(long long)p->line);
 #else
 		fprintf(f,"	%ld ",(long)p->line);
 #endif
+
+		if (utf8towcs(wpath, p->name, MAX_PATH) || fixpath(wpath, MAX_PATH) || wcstoutf8(zpath, wpath, PATH_MAX))
+		{
+			/* Just do it the stupid way */
+			emit_string(f,p->name,zlen(p->name));
+		}
+		else
+		{
+			emit_string(f,zpath,zlen(zpath));
+		}
+#else
+		fprintf(f,"	%ld ",p->line);
 		emit_string(f,p->name,zlen(p->name));
+#endif
 		fprintf(f,"\n");
 	}
 	fprintf(f,"done\n");
@@ -1245,8 +1262,9 @@ int ucrawll(W *w, int k)
 {
 	BW *bw;
 	off_t amnt;
-	WIND_BW(bw, w);
 	int rtn = -1;
+	WIND_BW(bw, w);
+
 
 	if (opt_left < 0)
 		amnt = bw->w / (-opt_left);

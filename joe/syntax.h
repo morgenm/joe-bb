@@ -6,6 +6,9 @@
  *	This file is part of JOE (Joe's Own Editor)
  */
 
+#ifdef JOEWIN
+	int defaultcolor;		/* Default color (irrespective of scheme) */
+#endif
 /* State */
 
 struct high_state {
@@ -91,3 +94,7 @@ extern int *attr_buf;
 extern struct high_syntax *syntax_list;
 
 void dump_syntax(BW *bw);
+
+#ifdef JOEWIN
+void applyscheme (struct jwcolors *colors);
+#endif
