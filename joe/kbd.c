@@ -102,6 +102,10 @@ static int keyval(char *s)
 		else if(!zcmp(s,"M3DRAG")) return KEY_M3DRAG;
 		else if(!zcmp(s,"MIDDLEDOWN")) return KEY_MIDDLEDOWN;
 		else if(!zcmp(s,"MIDDLEUP")) return KEY_MIDDLEUP;
+		else if(!zcmp(s,"MIDDLEDRAG")) return KEY_MIDDLEDRAG;
+		else if(!zcmp(s,"MRDOWN")) return KEY_MRDOWN;
+		else if(!zcmp(s,"MRUP")) return KEY_MRUP;
+		else if(!zcmp(s,"MRDRAG")) return KEY_MRDRAG;
 		else return s[0];
 	} else {
 		int ch = utf8_decode_string(s);
