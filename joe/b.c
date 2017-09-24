@@ -19,7 +19,11 @@
 #endif
 #endif
 
+#ifndef JOEWIN
 extern int errno;
+#endif
+
+
 
 #ifdef WITH_SELINUX
 #include <selinux/selinux.h>
@@ -164,6 +168,7 @@ B *bafter(B *b)
 
 int udebug_joe(W *w, int k)
 {
+	void debug_stacks(BW*);
 	char *buf = vsmk(128);
 	BW *bw;
 	B *b;
@@ -186,6 +191,16 @@ int udebug_joe(W *w, int k)
 			pnextl(bw->cursor);
 		}
 	}
+#ifdef JOEWIN
+	{
+		const char *jwQueueMemory();
+
+		binss(bw->cursor, jwQueueMemory());
+		pnextl(bw->cursor);
+		pnextl(bw->cursor);
+		pnextl(bw->cursor); /* Three lines of output */
+	}
+#endif
 	dump_syntax(bw);
 	dump_colors(bw);
 	return 0;
@@ -279,6 +294,9 @@ static B *bmkchn(H *chn, B *prop, off_t amnt, off_t nlines)
 	b->vt = 0;
 	b->db = 0;
 	b->parseone = 0;
+#ifdef JOEWIN
+	b->pchanges = 0;
+#endif
 	enquef(B, link, &bufs, b);
 	pcoalesce(b->bof);
 	pcoalesce(b->eof);
@@ -294,6 +312,10 @@ B *bmk(B *prop)
 /* Eliminate a buffer */
 void brm(B *b)
 {
+#ifdef JOEWIN
+	notify_deleting_buffer();
+#endif
+
 	if (b && !--b->count) {
 		if (b->changed)
 			abrerr(b->name);
@@ -433,6 +455,10 @@ void breplace(B *b, B *n)
 
 	/* Delete rest of n */
 	brm(n);
+
+#ifdef JOEWIN
+	notify_renamed_buffer(b);
+#endif
 }
 
 P *poffline(P *p)
@@ -2001,6 +2027,9 @@ void bdel(P *from, P *to)
 		else
 			brm(b);
 		from->b->changed = 1;
+#ifdef JOEWIN
+		notify_changed_buffer(from->b);
+#endif
 	}
 }
 
@@ -2152,7 +2181,9 @@ static void fixupins(P *p, off_t amnt, off_t nlines, H *hdr, ptrdiff_t hdramnt)
 	if (p->b->undo)
 		undoins(p->b->undo, p, amnt);
 	p->b->changed = 1;
-
+#ifdef JOEWIN
+	notify_changed_buffer(p->b);
+#endif
 }
 
 /* Insert a buffer at pointer position (the buffer goes away) */
@@ -2209,6 +2240,8 @@ P *binsm(P *p, const char *blk, ptrdiff_t amnt)
 
 /* Quoted insert */
 
+#ifndef JOEWIN
+
 P *binsmq(P *p, const char *blk, ptrdiff_t amnt)
 {
 	P *q = pdup(p, "binsmq");
@@ -2247,6 +2280,44 @@ P *binsmq(P *p, const char *blk, ptrdiff_t amnt)
 	prm(q);
 	return p;
 }
+
+#else
+
+P *binsmq(P *p, const char *blk, ptrdiff_t amnt)
+{
+	P *q = pdup(p, "binsmq");
+	ptrdiff_t x;
+
+	for (x = 0; x != amnt; ++x) {
+		if (blk[x] == ' ' || blk[x] == '\t')
+			break;
+	}
+
+	if (x == amnt) {
+		binsm(q, blk, amnt);
+		pfwrd(q, amnt);
+	} else {
+		int endsep = ISDIRSEP(blk[amnt - 1]);
+
+		if (endsep) --amnt;
+		binsc(q, '"');
+		pfwrd(q, 1);
+		binsm(q, blk, amnt);
+		pfwrd(q, amnt);
+		binsc(q, '"');
+		pfwrd(q, 1);
+
+		if (endsep) {
+			binsc(q, DIRSEPC);
+			pfwrd(q, 1);
+		}
+	}
+
+	prm(q);
+	return p;
+}
+
+#endif
 
 /* insert byte 'c' at 'p' */
 P *binsbyte(P *p, char c)
@@ -2548,7 +2619,7 @@ char *parsens(const char *s, off_t *skip, off_t *amnt)
 char *canonical(char *n)
 {
 	ptrdiff_t y = 0;
-#ifndef __MSDOS__
+#ifndef JOEWIN
 	ptrdiff_t x;
 	char *s;
 	for (y = zlen(n); ; --y)
@@ -2639,14 +2710,27 @@ static off_t pisindentg(P *p)
 
 char *dequote(const char *s)
 {
-        static char buf[1024];
+	static char buf[1024];
         char *p = buf;
-        while (*s) {
-                if (*s =='\\')
-                        ++s;
-                if (*s)
-                        *p++ = *s++;
-        }
+
+	if (s) {
+#ifndef JOEWIN
+		while (*s) {
+			if (*s =='\\')
+				++s;
+			if (*s)
+				*p++ = *s++;
+		}
+#else
+		while (*s) {
+			while (*s == '\"')
+s++;
+			if (*s)
+				*p++ = *s++;
+		}
+#endif
+	}
+
         *p = 0;
         return buf;
 }
@@ -2683,7 +2767,7 @@ B *bload(const char *s)
 	n = parsens(s, &skip, &amnt);
 
 	/* Open file or stream */
-#ifndef __MSDOS__
+#if !defined(__MSDOS__) && !defined(JOEWIN)
 	if (n[0] == '!') {
 		nescape(maint->t);
 		ttclsn();
@@ -2758,9 +2842,13 @@ B *bload(const char *s)
 	setopt(b,n);
 	b->rdonly = b->o.readonly;
 
+#ifdef JOEWIN
+	notify_new_buffer(b);
+#endif
+
 	/* Close stream */
 err:
-#ifndef __MSDOS__
+#if !defined(__MSDOS__) && !defined(JOEWIN)
 	if (s[0] == '!')
 		pclose(fi);
 	else
@@ -2811,6 +2899,12 @@ opnerr:
 		}
 		b->o.crlf = crlf;
 		prm(p);
+
+		/* Hex mode should turn off crlf */
+		if (b->o.hex && b->o.crlf) {
+			b->o.crlf = 0;
+			b->o.hex |= HEX_RESTORE_CRLF;
+		}
 	}
 
 	/* Search backwards through file: if first indented line
@@ -2822,17 +2916,14 @@ opnerr:
 		off_t i;
 		off_t hist_val[20];
 		int nhist = 0;
+		int old_max;
 		int max;
 		int maxi;
-		int space_lines = 0;
-		int tab_lines = 0;
-		
+		found_space = 0;
+		found_tab = 0;
 		p=pdup(b->eof, "bload");
 		/* Create histogram of indentation values */
 		for (y = 0; y != 250; ++y) {
-			found_space = 0;
-			found_tab = 0;
-			
 			p_goto_bol(p);
 			if ((i = pisindentg(p))) {
 				for (ix = 0; ix != nhist; ++ix)
@@ -2845,47 +2936,41 @@ opnerr:
 				} else if (ix != nhist) {
 					++hist[ix];
 				}
-				
-				/* Count characters used for indent */
-				if (found_tab) tab_lines++;
-				else if (found_space) space_lines++;
 			}
-			
-			if (prgetc(p) == NO_MORE_DATA)
+			if (prgetc(p)==NO_MORE_DATA)
 				break;
 		}
-		
-		if (tab_lines > space_lines) {
-			/* If more lines were indented with tabs than spaces, pick tabs. */
+		/* Find GCM of top 3 most popular indentation values */
+		old_max = 0;
+		for (y = 0; y != 3; ++y) {
+			max = 0;
+			for (x = 0; x != nhist; ++x)
+				if (hist[x] > max) {
+					max = hist[x];
+					maxi = x;
+				}
+			if (max) {
+				if (!old_max)
+					old_max = max;
+				if (guessed_step)
+					guessed_step = euclid(guessed_step, hist_val[maxi]);
+				else
+					guessed_step = hist_val[maxi];
+				hist[maxi] = 0;
+			}
+		}
+		/* If guessed value is large, scale it down some */
+		while (!(guessed_step & 1) && guessed_step > 8)
+			guessed_step >>= 1;
+
+		if (found_tab && !found_space) {
 			b->o.indentc = '\t';
 			b->o.istep = 1;
-		} else if (space_lines > 0) {
-			/* Find GCM of top 3 most popular indentation values */
-			for (y = 0; y != 3; ++y) {
-				max = 0;
-				for (x = 0; x != nhist; ++x)
-					if (hist[x] > max) {
-						max = hist[x];
-						maxi = x;
-					}
-				if (max) {
-					if (guessed_step)
-						guessed_step = euclid(guessed_step, hist_val[maxi]);
-					else
-						guessed_step = hist_val[maxi];
-					hist[maxi] = 0;
-				}
-			}
-			
-			/* If guessed value is large, scale it down some */
-			while (!(guessed_step & 1) && guessed_step > 8)
-				guessed_step >>= 1;
-			
+		} else if (found_space) {
 			b->o.indentc = ' ';
 			if (guessed_step)
 				b->o.istep = guessed_step;
 		}
-
 		prm(p);
 	}
 
@@ -2914,7 +2999,7 @@ B *bfind(const char *s)
 		return b;
 	}
 	for (b = bufs.link.next; b != &bufs; b = b->link.next)
-		if (b->name && !zcmp(s, b->name)) {
+		if (b->name && !fullfilecmp(s, b->name)) {
 			if (!b->orphan)
 				++b->count; /* Assumes caller is going to put this in a window! */
 			else
@@ -2943,7 +3028,7 @@ B *bfind_scratch(const char *s)
 		return b;
 	}
 	for (b = bufs.link.next; b != &bufs; b = b->link.next)
-		if (b->name && !zcmp(s, b->name)) {
+		if (b->name && !fullfilecmp(s, b->name)) {
 			if (!b->orphan)
 				++b->count;
 			else
@@ -2960,6 +3045,9 @@ B *bfind_scratch(const char *s)
 	b->er = berror;
 	b->name = zdup(s);
 	b->scratch = 1;
+#ifdef JOEWIN
+	notify_renamed_buffer(b);
+#endif
 	return b;
 }
 
@@ -2979,7 +3067,7 @@ B *bcheck_loaded(const char *s)
 		return NULL;
 	}
 	for (b = bufs.link.next; b != &bufs; b = b->link.next)
-		if (b->name && !zcmp(s, b->name)) {
+		if (b->name && !fullfilecmp(s, b->name)) {
 			return b;
 		}
 
@@ -3105,6 +3193,7 @@ int break_symlinks; /* Set to break symbolic links and hard links on writes */
 int bsave(P *p, const char *as, off_t size, int flag)
 {
 	struct stat sbuf;
+	const char* filename = as;
 	int have_stat = 0;
 	FILE *f;
 	off_t skip, amnt;
@@ -3114,22 +3203,25 @@ int bsave(P *p, const char *as, off_t size, int flag)
 	if (amnt < size)
 		size = amnt;
 
-#ifndef __MSDOS__
+#if !defined(__MSDOS__) && !defined(JOEWIN)
 	if (s[0] == '!') {
 		nescape(maint->t);
 		ttclsn();
 		f = popen(s + 1, "w");
 	} else
 #endif
-	if (s[0] == '>' && s[1] == '>')
-		f = fopen(dequote(s + 2), "a");
-	else if (!zcmp(s, "-")) {
+	if (s[0] == '>' && s[1] == '>') {
+		filename = dequote(s + 2);
+		f = fopen(filename, "a");
+	} else if (!zcmp(s, "-")) {
 		nescape(maint->t);
 		ttclsn();
 		f = stdout;
-	} else if (skip || amnt != MAXOFF)
-		f = fopen(dequote(s), "r+");
-	else {
+		filename = NULL;
+	} else if (skip || amnt != MAXOFF) {
+		filename = dequote(s);
+		f = fopen(filename, "r+");
+	} else {
 		have_stat = !stat(dequote(s), &sbuf);
 		if (!have_stat)
 			sbuf.st_mode = 0666;
@@ -3154,8 +3246,11 @@ int bsave(P *p, const char *as, off_t size, int flag)
 					}
 				}
 #endif
-				unlink(dequote(s));
+#ifndef JOEWIN
 				g = creat(dequote(s), sbuf.st_mode & ~(unsigned)(S_ISUID | S_ISGID));
+#else
+				g = creat(dequote(s), sbuf.st_mode);
+#endif
 #ifdef WITH_SELINUX
 				if (selinux_enabled) {
 					setfilecon(dequote(s), &se);
@@ -3169,7 +3264,8 @@ int bsave(P *p, const char *as, off_t size, int flag)
 			}
 		}
 
-		f = fopen(dequote(s), "w");
+		filename = (char *)dequote(s);
+		f = fopen(filename, "w");
 		norm = 1;
 	}
 	joesep(s);
@@ -3204,11 +3300,15 @@ int bsave(P *p, const char *as, off_t size, int flag)
 
 	/* Restore setuid bit */
 	if (!berror && have_stat) {
+#ifndef JOEWIN
 		fchmod(fileno(f), sbuf.st_mode);
+#else
+		chmod(filename, sbuf.st_mode & (S_IREAD | S_IWRITE));
+#endif
 	}
 
 err:
-#ifndef __MSDOS__
+#if !defined(__MSDOS__) && !defined(JOEWIN)
 	if (s[0] == '!')
 		pclose(f);
 	else
@@ -3220,7 +3320,7 @@ err:
 
 	/* Update original date of file */
 	/* If it's not named, it's about to be */
-	if (!berror && norm && flag && (!p->b->name || flag == 2 || !zcmp(s,p->b->name))) {
+	if (!berror && norm && flag && (!p->b->name || flag == 2 || !filecmp(s,p->b->name))) {
 		if (!stat(dequote(s),&sbuf))
 			p->b->mod_time = sbuf.st_mtime;
 	}
@@ -3316,7 +3416,11 @@ RETSIGTYPE ttsig(int sig)
 	time_t tim = time(NULL);
 	B *b;
 	int tmpfd;
-	struct stat sbuf;
+
+#ifdef JOEWIN
+	/* Allow us to inspect */
+	assert(0);
+#endif
 
 	/* Do not allow double-fault */
 	if (ttsig_handled)
@@ -3328,10 +3432,13 @@ RETSIGTYPE ttsig(int sig)
                 goto skipfile;
 
 	if ((tmpfd = open("DEADJOE", O_RDWR | O_EXCL | O_CREAT, 0600)) < 0) {
+#ifndef JOEWIN
+		struct stat sbuf;
 		if (lstat("DEADJOE", &sbuf) < 0)
 			_exit(1);
 		if (!S_ISREG(sbuf.st_mode) || sbuf.st_uid != geteuid())
 			_exit(1);
+#endif
 		/*
 		   A race condition still exists between the lstat() and the open()
 		   systemcall, which leads to a possible denial-of-service attack
@@ -3341,8 +3448,10 @@ RETSIGTYPE ttsig(int sig)
 		 */
 		if ((tmpfd = open("DEADJOE", O_RDWR | O_APPEND)) < 0)
 			_exit(1);
+#ifndef JOEWIN
 		if (fchmod(tmpfd, S_IRUSR | S_IWUSR) < 0)
 			_exit(1);
+#endif
 	}
 	if ((ttsig_f = fdopen(tmpfd, "a")) == NULL)
 		_exit(1);
@@ -3353,6 +3462,10 @@ RETSIGTYPE ttsig(int sig)
 		fprintf(ttsig_f, "*** JOE was aborted due to swap file I/O error\n");
 	else if (sig == -1)
 		fprintf(ttsig_f, "*** JOE was aborted due to malloc returning NULL\n");
+#ifdef JOEWIN
+	else if (sig < 0)
+		fprintf(ttsig_f, "*** JOE was aborted by Windows error %X\n", sig);
+#endif
 	else if (sig)
 		fprintf(ttsig_f, "*** JOE was aborted by UNIX signal %d\n", sig);
 	else
@@ -3398,6 +3511,9 @@ skipfile:
 
 int lock_it(const char *qpath,char *bf)
 {
+#ifdef JOEWIN
+	return 0;
+#else
         char *path = dequote(qpath);
 	char *lock_name=dirprt(path);
 	char *name=namprt(path);
@@ -3421,10 +3537,12 @@ int lock_it(const char *qpath,char *bf)
 	}
 	obj_free(lock_name);
 	return -1;
+#endif
 }
 
 void unlock_it(const char *qpath)
 {
+#ifndef JOEWIN
         char *path = dequote(qpath);
 	char *lock_name=dirprt(path);
 	char *name=namprt(path);
@@ -3432,6 +3550,7 @@ void unlock_it(const char *qpath)
 	lock_name=vscat(lock_name,sv(name));
 	unlink(lock_name);
 	obj_free(lock_name);
+#endif
 }
 
 /* True if file is regular */
