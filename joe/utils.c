@@ -61,7 +61,11 @@ ptrdiff_t joe_read(int fd, void *buf, ptrdiff_t size)
 	ptrdiff_t rt;
 
 	do {
+#ifndef JOEWIN
 		rt = read(fd, buf, (size_t)size);
+#else
+		rt = read(fd, buf, (unsigned int)size);
+#endif
 	} while (rt < 0 && errno == EINTR);
 	return rt;
 }
@@ -71,18 +75,26 @@ ptrdiff_t joe_write(int fd, const void *buf, ptrdiff_t size)
 	ptrdiff_t rt;
 
 	do {
+#ifndef JOEWIN
 		rt = write(fd, buf, (size_t)size);
+#else
+		rt = write(fd, buf, (unsigned int)size);
+#endif
 	} while (rt < 0 && errno == EINTR);
 	return rt;
 }
 
 int joe_ioctl(int fd, unsigned long req, void *ptr)
 {
+#ifdef JOEWIN
+	return -1;
+#else
 	int rt;
 	do {
 		rt = ioctl(fd, req, ptr);
 	} while (rt == -1 && errno == EINTR);
 	return rt;
+#endif
 }
 
 /* Heap checking versions of malloc() */
@@ -553,6 +565,83 @@ int *Zdup(const int *bf)
 	int *p = (int *)joe_malloc(size);
 	memcpy(p, bf, (size_t)size);
 	return p;
+}
+
+int filecmp(const char* s1, const char* s2)
+{
+#ifndef JOEWIN
+	return zcmp(s1, s2);
+#else
+	if (!s1 || !s2)
+	{
+		if (!s1 && !s2)
+		{
+			return 0;
+		}
+
+		return s1 ? 1 : -1;
+	}
+
+	for (;; s1++, s2++)
+	{
+		char c1 = *s1, c2 = *s2;
+		
+		if (!c1 || !c2)
+		{
+			if (!c1 && !c2)
+			{
+				return 0;
+			}
+
+			return c1 ? 1 : -1;
+		}
+
+		if (c1 == c2)
+		{
+			/* Pass */
+		}
+		else if (ISDIRSEP(c1) && ISDIRSEP(c2))
+		{
+			/* Pass */
+		}
+		else if (tolower(c1) == tolower(c2))
+		{
+			/* Pass */
+		}
+		else if (c1 < c2)
+		{
+			return -1;
+		}
+		else
+		{
+			return 1;
+		}
+	}
+#endif
+}
+
+int fullfilecmp(const char *f1, const char *f2)
+{
+#ifndef JOEWIN
+	return zcmp(f1, f2);
+#else
+	wchar_t wf1[MAX_PATH + 1], wf2[MAX_PATH + 1];
+
+	if (utf8towcs(wf1, f1, MAX_PATH) || utf8towcs(wf2, f2, MAX_PATH))
+	{
+		/* Can't convert! */
+		assert(FALSE);
+		return filecmp(f1, f2);
+	}
+
+	if (fixpath(wf1, MAX_PATH) || fixpath(wf2, MAX_PATH))
+	{
+		return filecmp(f1, f2);
+	}
+
+	/* Is this really the way to compare filenames in every locale? */
+	return wcsicmp(wf1, wf2);
+#endif
 }
 
 #ifndef SIG_ERR

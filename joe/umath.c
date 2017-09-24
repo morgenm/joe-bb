@@ -664,7 +664,11 @@ static double m_erfc(double n) { return erfc(n); }
 #endif
 
 #ifdef HAVE_J0
+#ifdef _MSC_VER
+static double m_j0(double n) { return _j0(n); }
+#else
 static double m_j0(double n) { return j0(n); }
+#endif
 #else
 #ifdef j0
 static double m_j0(double n) { return j0(n); }
@@ -672,7 +676,11 @@ static double m_j0(double n) { return j0(n); }
 #endif
 
 #ifdef HAVE_J1
+#ifdef _MSC_VER
+static double m_j1(double n) { return _j1(n); }
+#else
 static double m_j1(double n) { return j1(n); }
+#endif
 #else
 #ifdef j1
 static double m_j1(double n) { return j1(n); }
@@ -680,7 +688,11 @@ static double m_j1(double n) { return j1(n); }
 #endif
 
 #ifdef HAVE_Y0
+#ifdef _MSC_VER
+static double m_y0(double n) { return _y0(n); }
+#else
 static double m_y0(double n) { return y0(n); }
+#endif
 #else
 #ifdef y0
 static double m_y0(double n) { return y0(n); }
@@ -688,7 +700,11 @@ static double m_y0(double n) { return y0(n); }
 #endif
 
 #ifdef HAVE_Y1
+#ifdef _MSC_VER
+static double m_y1(double n) { return _y1(n); }
+#else
 static double m_y1(double n) { return y1(n); }
+#endif
 #else
 #ifdef y1
 static double m_y1(double n) { return y1(n); }

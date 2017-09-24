@@ -18,8 +18,6 @@ After:
 
 ![After](http://joe-editor.sourceforge.net/after.gif)
 
-* Enhancements
-
 	* New color scheme feature, which can be accessed with ^T S or
 	  by setting the **-colors** option.
 
