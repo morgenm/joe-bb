@@ -9,7 +9,7 @@
 /* Prompt window (a BW) */
 
 struct pw {
-	int	(*pfunc) (W *w, char *s, void *object, int *notify);	/* Func which gets called when RTN is hit */
+	int	(*pfunc) (W *w, char *s, void *object);	/* Func which gets called when RTN is hit */
 	int	(*abrt) (W *w, void *object);	/* Func which gets called when window is aborted */
 	int	(*tab) (BW *bw, int k);	/* Func which gets called when TAB is hit */
 	char *prompt;		/* Prompt string */
@@ -18,10 +18,11 @@ struct pw {
 	B	*hist;		/* History buffer */
 	void	*object;	/* Object */
 	int	file_prompt;	/* Set if this is a file name prompt, so do ~ expansion */
+	int	oldcury;
 };
 
 /* BW *wmkpw(BW *bw,char *prompt,int (*func)(),char *huh,int (*abrt)(),
-             int (*tab)(),void *object,int *notify);
+             int (*tab)(),void *object);
  * Create a prompt window for the given window
  * file_prompt flags:
  *   bit 0: ~ expansion
@@ -29,10 +30,12 @@ struct pw {
  *   bit 2: seed with directory
  *   bit 3: it's a shell command, not just a file name
  */
-BW *wmkpw(W *w, const char *prompt, B **history, int (*func) (W *w, char *s, void *object, int *notify),
+BW *wmkpw(W *w, const char *prompt, B **history, int (*func) (W *w, char *s, void *object),
           const char *huh, int (*abrt)(W *w, void *object),
           int (*tab)(BW *bw, int k),
-          void *object, int *notify, struct charmap *map, int file_prompt);
+          void *object, struct charmap *map, int file_prompt);
+
+char *ask(W *w, const char *prompt, B **history, char *huh, int (*tab)(), struct charmap *map, int file_prompt, int retrieve_last, char *preload);
 
 #define PWFLAG_FILENAME 1 /* Prompt is for a filename, so perform ~ expansion and // restart */
 #define PWFLAG_UPDATE_CD 2 /* Update current directory when prompt complete */

@@ -9,13 +9,13 @@
 #define TO_CHAR_OK(a) ((char)(a)) /* Means it's OK that we are converting int to char */
 #define SIZEOF(a) ((ptrdiff_t)sizeof(a)) /* Signed version of sizeof() */
 
-#define WIND_BW(x, y) do { \
+#define WIND_BW(x,y) do { \
   if (!((y)->watom->what & (TYPETW | TYPEPW))) \
     return -1; \
   (x) = (BW *)(y)->object; \
   } while(0)
 
-#define WIND_MENU(x, y) do { \
+#define WIND_MENU(x,y) do { \
   if ((y)->watom->what != TYPEMENU) \
     return -1; \
   (x) = (MENU *)(y)->object; \
@@ -29,6 +29,7 @@
 #include <string.h>
 #include <errno.h>
 #include <math.h>
+#include <stdarg.h>
 
 #ifdef HAVE_SYS_TYPES_H
 #include <sys/types.h>
@@ -64,16 +65,21 @@ typedef int pid_t;
 #include <time.h>
 #endif
 
-#define joe_gettext(s) my_gettext((s))
+#ifdef HAVE_UCONTEXT_H
 
-/*
-#ifdef ENABLE_NLS
-#include <libintl.h>
-#define joe_gettext(s) (char *)gettext((char *)(s))
-#else
-#define joe_gettext(s) ((char *)(s))
+#ifndef __sparc /* Makecontext is broken in many version of solaris */
+#define USE_UCONTEXT 1
 #endif
-*/
+
+#endif
+
+#ifdef USE_UCONTEXT
+#include <ucontext.h>
+#else
+#include <setjmp.h>
+#endif
+
+#define joe_gettext(s) my_gettext((s))
 
 /* Strings needing translation are marked with this macro */
 #define _(s) (s)
@@ -222,7 +228,6 @@ typedef int pid_t;
 #define KEY_MIDDLEUP	0x10000B
 #define KEY_MIDDLEDOWN	0x10000C
 
-#define stdsiz		8192
 #define FITHEIGHT	4		/* Minimum height needed for new text windows */
 #define FITMIN		2		/* Minimum main window height */
 #define NPROC		8		/* Number of processes we keep track of */
@@ -248,7 +253,7 @@ typedef struct Zhash ZHASH;
 typedef struct kmap KMAP;
 typedef struct kbd KBD;
 typedef struct key KEY;
-typedef struct watom WATOM;
+typedef struct watom WATOM; /* \ odd character */
 typedef struct screen Screen;
 typedef struct window W;
 typedef struct base BASE;
@@ -269,8 +274,10 @@ typedef struct vfile VFILE;
 typedef struct highlight_state HIGHLIGHT_STATE;
 typedef struct mpx MPX;
 typedef struct jfile JFILE;
+typedef struct obj Obj;
 typedef struct vt_context VT;
 typedef struct Phash PHASH;
+typedef struct coroutine Coroutine;
 typedef struct color_set COLORSET;
 typedef struct color_scheme SCHEME;
 
@@ -294,6 +301,8 @@ struct highlight_state {
 
 /* Include files */
 
+#include "obj.h"
+#include "coroutine.h"
 #include "charmap.h"
 #include "cclass.h"
 #include "b.h"
@@ -337,9 +346,7 @@ struct highlight_state {
 #include "utag.h"
 #include "utf8.h"
 #include "utils.h"
-#include "va.h"
 #include "vfile.h"
-#include "vs.h"
 #include "w.h"
 #include "gettext.h"
 #include "builtin.h"

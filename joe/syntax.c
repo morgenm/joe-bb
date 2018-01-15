@@ -459,22 +459,23 @@ static struct high_cmd *mkcmd()
 
 static struct color_def *find_color(struct color_def *colors,char *name,char *syn)
 {
-	char bf[256];
+	char *bf = vsmk(128);
 	struct color_def *color;
-	joe_snprintf_2(bf, SIZEOF(bf), "%s.%s", syn, name);
+	bf = vsfmt(bf, 0, "%s.%s", syn, name);
 	for (color = colors; color; color = color->next)
 		if (!zcmp(color->name,bf)) break;
 	if (color)
 		return color;
 	for (color = colors; color; color = color->next)
 		if (!zcmp(color->name,name)) break;
+	obj_free(bf);
 	return color;
 }
 
 void parse_syntax_color_def(struct color_def **color_list,const char *p,char *name,int line)
 {
-	char bf[256];
-	if(!parse_tows(&p, bf)) {
+	char *bf = 0;
+	if(!parse_tows(&p, &bf)) {
 		struct color_def *color;
 
 		/* Find color */
@@ -509,26 +510,26 @@ void dump_syntax(BW *bw)
 {
 	struct high_syntax *syntax;
 	struct high_param *params;
-	char buf[1024];
-	joe_snprintf_1(buf, SIZEOF(buf), "Allocated %d stack frames\n", stack_count);
+	char *buf = 0;
+	buf = vsfmt(buf, 0, "Allocated %d stack frames\n", stack_count);
 	binss(bw->cursor, buf);
 	pnextl(bw->cursor);
 	for (syntax = syntax_list; syntax; syntax = syntax->next) {
 		int x;
-		joe_snprintf_3(buf, SIZEOF(buf), "Syntax name=%s, subr=%s, nstates=%d\n",syntax->name,syntax->subr,(int)syntax->nstates);
+		buf = vsfmt(buf, 0, "Syntax name=%s, subr=%s, nstates=%d\n",syntax->name,syntax->subr,syntax->nstates);
 		binss(bw->cursor, buf);
 		pnextl(bw->cursor);
-		zlcpy(buf, SIZEOF(buf), "params=(");
+		buf = vsdupz("params=(");
 		for(params = syntax->params; params; params = params->next) {
-			zlcat(buf, SIZEOF(buf), " ");
-			zlcat(buf, SIZEOF(buf), params->name);
+			buf = vscatz(buf, " ");
+			buf = vscatz(buf, params->name);
 		}
-		zlcat(buf, SIZEOF(buf), " )\n");
+		buf = vscatz(buf, " )\n");
 		binss(bw->cursor, buf);
 		pnextl(bw->cursor);
 		for(x=0;x!=syntax->nstates;++x) {
 			struct high_state *s = syntax->states[x];
-			joe_snprintf_2(buf, SIZEOF(buf), "   state %s %x\n",s->name,s->color);
+			buf = vsfmt(buf, 0, "   state %s %x\n",s->name,s->color);
 			binss(bw->cursor, buf);
 			pnextl(bw->cursor);
 //			for (l = s->src; l; l = l->next) {
@@ -537,7 +538,7 @@ void dump_syntax(BW *bw)
 //				binss(bw->cursor, buf);
 //				pnextl(bw->cursor);
 //			}
-			joe_snprintf_2(buf, SIZEOF(buf), "     default -> %s %d\n",(s->dflt->new_state ? s->dflt->new_state->name : "ERROR! Unknown state!"),(int)s->dflt->recolor);
+			buf = vsfmt(buf, 0, "     default -> %s %d\n",(s->dflt->new_state ? s->dflt->new_state->name : "ERROR! Unknown state!"),(int)s->dflt->recolor);
 			binss(bw->cursor, buf);
 			pnextl(bw->cursor);
 		}
@@ -547,7 +548,7 @@ void dump_syntax(BW *bw)
 static struct high_param *parse_params(struct high_param *current_params,const char **ptr,char *name,int line)
 {
 	const char *p = *ptr;
-	char bf[256];
+	char *bf = 0;
 	struct high_param *params;
 	struct high_param **param_ptr;
 
@@ -568,7 +569,7 @@ static struct high_param *parse_params(struct high_param *current_params,const c
 			if (!parse_char(&p, ')'))
 				break;
 			else if (!parse_char(&p, '-')) {
-				if (!parse_ident(&p,bf,SIZEOF(bf))) {
+				if (!parse_ident(&p,&bf)) {
 					int cmp = 0;
 					param_ptr = &params;
 					/* Parameters are sorted */
@@ -583,7 +584,7 @@ static struct high_param *parse_params(struct high_param *current_params,const c
 				} else {
 					logerror_2(joe_gettext(_("%s %d: Missing parameter name\n")),name,line);
 				}
-			} else if (!parse_ident(&p,bf,SIZEOF(bf))) {
+			} else if (!parse_ident(&p,&bf)) {
 				int cmp = 0;
 				param_ptr = &params;
 				/* Keep parameters sorted */
@@ -603,6 +604,7 @@ static struct high_param *parse_params(struct high_param *current_params,const c
 		}
 	}
 
+	obj_free(bf);
 	*ptr = p;
 	return params;
 }
@@ -614,11 +616,11 @@ struct high_syntax *load_syntax_subr(const char *name,char *subr,struct high_par
 
 static int parse_options(struct high_syntax *syntax,struct high_cmd *cmd,JFILE *f,const char *p,int parsing_strings,char *name,int line)
 {
-	char buf[1024];
-	char bf[256];
-	char bf1[256];
+	char *buf = vsmk(128);
+	char *bf = 0;
+	char *bf1 = 0;
 
-	while (parse_ws(&p,'#'), !parse_ident(&p,bf,SIZEOF(bf)))
+	while (parse_ws(&p,'#'), !parse_ident(&p,&bf)) {
 		if(!zcmp(bf,"buffer")) {
 			cmd->start_buffering = 1;
 		} else if(!zcmp(bf,"hold")) {
@@ -640,18 +642,18 @@ static int parse_options(struct high_syntax *syntax,struct high_cmd *cmd,JFILE *
 			if(!parse_char(&p,'=')) {
 				parse_ws(&p,'#');
 				if (!parse_char(&p,'.')) {
-					zlcpy(bf, SIZEOF(bf), syntax->name);
+					bf = vsdupz(syntax->name);
 					goto subr;
-				} else if (parse_ident(&p,bf,SIZEOF(bf)))
+				} else if (parse_ident(&p,&bf))
 					logerror_2(joe_gettext(_("%s %d: Missing value for option\n")),name,line);
 				else {
 					if (!parse_char(&p,'.')) {
 						subr:
-						if (parse_ident(&p,bf1,SIZEOF(bf1)))
+						if (parse_ident(&p,&bf1))
 							logerror_2(joe_gettext(_("%s %d: Missing subroutine name\n")),name,line);
-						cmd->call = load_syntax_subr(bf,bf1,parse_params(syntax->params,&p,name,line));
 					} else
-						cmd->call = load_syntax_subr(bf,0,parse_params(syntax->params,&p,name,line));
+						bf1 = 0;
+					cmd->call = load_syntax_subr(bf,bf1,parse_params(syntax->params,&p,name,line));
 				}
 			} else
 				logerror_2(joe_gettext(_("%s %d: Missing value for option\n")),name,line);
@@ -662,7 +664,7 @@ static int parse_options(struct high_syntax *syntax,struct high_cmd *cmd,JFILE *
 		} else if(!parsing_strings && (!zcmp(bf,"strings") || !zcmp(bf,"istrings"))) {
 			if (bf[0]=='i')
 				cmd->ignore = 1;
-			while(jfgets(buf,sizeof(buf),f)) {
+			while(jfgets(&buf,f)) {
 				++line;
 				p = buf;
 				parse_ws(&p,'#');
@@ -671,11 +673,11 @@ static int parse_options(struct high_syntax *syntax,struct high_cmd *cmd,JFILE *
 					int lkwbuf[256 * 3];
 					if(!parse_field(&p,"done"))
 						break;
-					if(parse_Zstring(&p,kwbuf,SIZEOF(kwbuf)/SIZEOF(kwbuf[0])) >= 0) {
+					if(parse_Zstring(&p, kwbuf, SIZEOF(kwbuf)/SIZEOF(kwbuf[0]))) {
 						parse_ws(&p,'#');
 						if (cmd->ignore)
 							lowerize(lkwbuf, SIZEOF(lkwbuf)/SIZEOF(lkwbuf[0]), kwbuf);
-						if(!parse_ident(&p,bf1,SIZEOF(bf1))) {
+						if(!parse_ident(&p,&bf1)) {
 							struct high_cmd *kw_cmd=mkcmd();
 							kw_cmd->noeat=1;
 							kw_cmd->new_state = find_state(syntax,bf1);
@@ -701,8 +703,11 @@ static int parse_options(struct high_syntax *syntax,struct high_cmd *cmd,JFILE *
 			cmd->stop_mark = 1;
 		} else if(!zcmp(bf,"recolormark")) {
 			cmd->recolor_mark = 1;
-		} else
-			logerror_2(joe_gettext(_("%s %d: Unknown option\n")),name,line);
+		} else {
+			logerror_3(joe_gettext(_("%s %d: Unknown option %s\n")),name,line,bf);
+		}
+	}
+	obj_free(buf);
 	return line;
 }
 
@@ -718,9 +723,9 @@ struct ifstack {
 
 static struct high_state *load_dfa(struct high_syntax *syntax)
 {
-	char name[1024];
-	char buf[1024];
-	char bf[256];
+	char *name = vsmk(128);
+	char *buf = vsmk(128);
+	char *bf = 0;
 	const char *p;
 	ptrdiff_t c;
 	JFILE *f = 0;
@@ -734,29 +739,30 @@ static struct high_state *load_dfa(struct high_syntax *syntax)
 	/* Load it */
 	p = getenv("HOME");
 	if (p) {
-		joe_snprintf_2(name,SIZEOF(name),"%s/.joe/syntax/%s.jsf",p,syntax->name);
+		name = vsfmt(name, 0, "%s/.joe/syntax/%s.jsf",p,syntax->name);
 		f = jfopen(name,"r");
 	}
 
 	if (!f) {
-		joe_snprintf_2(name,SIZEOF(name),"%ssyntax/%s.jsf",JOEDATA,syntax->name);
+		name = vsfmt(name, 0, "%ssyntax/%s.jsf",JOEDATA,syntax->name);
 		f = jfopen(name,"r");
 	}
 	if (!f) {
-		joe_snprintf_1(name,SIZEOF(name),"*%s.jsf",syntax->name);
+		name = vsfmt(name, 0, "*%s.jsf",syntax->name);
 		f = jfopen(name,"r");
 	}
 	if (!f) {
+		obj_free(name);
 		return 0;
 	}
 
 	/* Parse file */
-	while(jfgets(buf,SIZEOF(buf),f)) {
+	while(jfgets(&buf,f)) {
 		++line;
 		p = buf;
 		c = parse_ws(&p,'#');
 		if (!parse_char(&p, '.')) {
-			if (!parse_ident(&p, bf, SIZEOF(bf))) {
+			if (!parse_ident(&p, &bf)) {
 				if (!zcmp(bf, "ifdef")) {
 					struct ifstack *st = (struct ifstack *)joe_malloc(SIZEOF(struct ifstack));
 					st->next = stack;
@@ -766,7 +772,7 @@ static struct high_state *load_dfa(struct high_syntax *syntax)
 					st->line = line;
 					if (!stack || !stack->ignore) {
 						parse_ws(&p,'#');
-						if (!parse_ident(&p, bf, SIZEOF(bf))) {
+						if (!parse_ident(&p, &bf)) {
 							struct high_param *param;
 							for (param = syntax->params; param; param = param->next)
 								if (!zcmp(param->name, bf)) {
@@ -795,7 +801,7 @@ static struct high_state *load_dfa(struct high_syntax *syntax)
 						logerror_2(joe_gettext(_("%s %d: endif with no matching if\n")),name,line);
 				} else if (!zcmp(bf, "subr")) {
 					parse_ws(&p, '#');
-					if (parse_ident(&p, bf, SIZEOF(bf))) {
+					if (parse_ident(&p, &bf)) {
 						logerror_2(joe_gettext(_("%s %d: Missing subroutine name\n")),name,line);
 					} else {
 						if (!stack || !stack->ignore) {
@@ -824,7 +830,7 @@ static struct high_state *load_dfa(struct high_syntax *syntax)
 		} else if ((syntax->subr && !this_one) || (!syntax->subr && inside_subr)) {
 			/* Ignore this line because it's not the code we want */
 		} else if(!parse_char(&p, ':')) {
-			if(!parse_ident(&p, bf, SIZEOF(bf))) {
+			if(!parse_ident(&p, &bf)) {
 
 				state = find_state(syntax,bf);
 
@@ -832,7 +838,7 @@ static struct high_state *load_dfa(struct high_syntax *syntax)
 					first = state;
 
 				parse_ws(&p,'#');
-				if(!parse_tows(&p,bf)) {
+				if(!parse_tows(&p,&bf)) {
 					struct color_def *color;
 					for(color=syntax->color;color;color=color->next)
 						if(!zcmp(color->name,bf))
@@ -843,7 +849,7 @@ static struct high_state *load_dfa(struct high_syntax *syntax)
 
 					state->color = 0;
 					state->colorp = color;
-					while(parse_ws(&p, '#'), !parse_ident(&p, bf, SIZEOF(bf))) {
+					while(parse_ws(&p, '#'), !parse_ident(&p, &bf)) {
 						if(!zcmp(bf, "comment")) {
 							state->color |= CONTEXT_COMMENT;
 						} else if(!zcmp(bf, "string")) {
@@ -887,7 +893,7 @@ static struct high_state *load_dfa(struct high_syntax *syntax)
 					}
 					/* Create command */
 					parse_ws(&p,'#');
-					if(!parse_ident(&p,bf,SIZEOF(bf))) {
+					if(!parse_ident(&p,&bf)) {
 						cmd->new_state = find_state(syntax,bf);
 						line = parse_options(syntax,cmd,f,p,0,name,line);
 					} else
@@ -908,8 +914,8 @@ static struct high_state *load_dfa(struct high_syntax *syntax)
 
 	jfclose(f);
 
-	/* Compile cmaps */
 	build_cmaps(syntax);
+	obj_free(name);
 
 	return first;
 }

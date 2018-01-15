@@ -347,13 +347,18 @@ int clrins(SCRN *t);
 
 int meta_color(const char *s);
 
+/* Calculate no. lines needed to fit a string within a given width: used to break up
+ * prompts into multiple lines in qw.c */
+int break_height(struct charmap *map, const char **src, ptrdiff_t *src_len, int wid, int n);
+
 /* Generate a field */
 void genfield(SCRN *t,int (*scrn)[COMPOSE],int *attr,ptrdiff_t x,ptrdiff_t y,ptrdiff_t ofst,const char *s,ptrdiff_t len,int atr,ptrdiff_t width,int flg,int *fmt);
 
 /* Column width of a string takes into account utf-8) */
-ptrdiff_t txtwidth(const char *s,ptrdiff_t len);
-
+ptrdiff_t txtwidth(struct charmap *map, const char *s, ptrdiff_t len);
 off_t txtwidth1(struct charmap *map, off_t tabwidth, const char *s, ptrdiff_t len);
+
+void unesc_genfmt(char *d, char *s, int len, int max);
 
 /* Generate a field: formatted */
 void genfmt(SCRN *t, ptrdiff_t x, ptrdiff_t y, ptrdiff_t ofst, const char *s, int atr, int iatr, int flg);

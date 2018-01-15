@@ -95,8 +95,5 @@ struct charmap *guess_map(const char *buf, ptrdiff_t len);
 extern int guess_non_utf8;
 extern int guess_utf8;
 
-void my_iconv(char *dest, ptrdiff_t destsiz, struct charmap *dest_map,
-              const char *src,struct charmap *src_map);
-
-void my_iconv1(char *dest, ptrdiff_t destsiz, struct charmap *dest_map,
-              const int *src);
+char *my_iconv(char *dest, struct charmap *dest_map, const char *src, struct charmap *src_map);
+char *my_iconv1(char *dest, struct charmap *dest_map, const int *src);
