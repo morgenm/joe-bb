@@ -13,44 +13,33 @@ int joe_state;
 
 /* Save a history buffer */
 
-static void save_hist(FILE *f,B *b)
+void save_hist(FILE *f,B *b)
 {
-	char buf[512];
-	ptrdiff_t len = SIZEOF(buf);
+	char *buf = vsmk(128);
 	if (b) {
 		P *p = pdup(b->bof, "save_hist");
-		P *q = pdup(b->bof, "save_hist");
 		if (b->eof->line>10)
 			pline(p,b->eof->line-10);
-		pset(q,p);
 		while (!piseof(p)) {
-			pnextl(q);
-			if (q->byte-p->byte < SIZEOF(buf)) {
-				len = TO_DIFF_OK(q->byte - p->byte);
-				brmem(p,buf,len);
-			} else {
-				len = SIZEOF(buf);
-				brmem(p,buf,len);
-				buf[len - 1] = '\n';
-			}
+			buf = brzs(buf, p);
+			buf = vsadd(buf, '\n');
+			pnextl(p);
 			fprintf(f,"\t");
-			emit_string(f,buf,len);
+			emit_string(f,sv(buf));
 			fprintf(f,"\n");
-			pset(p,q);
 		}
 		prm(p);
-		prm(q);
 	}
 	fprintf(f,"done\n");
 }
 
 /* Load a history buffer */
 
-static void load_hist(FILE *f,B **bp)
+void load_hist(FILE *f,B **bp)
 {
 	B *b;
-	char buf[1024];
-	char bf[1024];
+	char *buf = 0;
+	char *bf = 0;
 	P *q;
 
 	b = *bp;
@@ -59,11 +48,11 @@ static void load_hist(FILE *f,B **bp)
 
 	q = pdup(b->eof, "load_hist");
 
-	while(fgets(buf,sizeof(buf),f) && zcmp(buf,"done\n")) {
+	while(vsgets(&buf,f) && zcmp(buf, "done")) {
 		const char *p = buf;
 		ptrdiff_t len;
 		parse_ws(&p,'#');
-		len = parse_string(&p,bf,SIZEOF(bf));
+		len = parse_string(&p,&bf);
 		if (len>0) {
 			if (bf[len - 1] != '\n')
 				bf[len - 1] = '\n';
@@ -77,26 +66,29 @@ static void load_hist(FILE *f,B **bp)
 
 /* Save state */
 
-#define STATE_ID "# JOE state file v1.0\n"
+#define STATE_ID "# JOE state file v1.0"
 
 void save_state()
 {
-	char *home = getenv("HOME");
+	const char *home = getenv("HOME");
+	char *path = NULL;
 	mode_t old_mask;
 	FILE *f;
+	
 	if (!joe_state)
 		return;
 	if (!home)
 		return;
-	joe_snprintf_1(stdbuf,stdsiz,"%s/.joe_state",home);
+	
+	path = vsfmt(NULL,0,"%s/.joe_state",home);
 	old_mask = umask(0066);
-	f = fopen(stdbuf,"w");
+	f = fopen(path, "w");
 	umask(old_mask);
 	if(!f)
 		return;
 
 	/* Write ID */
-	fprintf(f,"%s",STATE_ID);
+	fprintf(f, "%s\n", STATE_ID);
 
 	/* Write state information */
 	fprintf(f,"search\n"); save_srch(f);
@@ -119,51 +111,51 @@ void save_state()
 
 void load_state()
 {
-	char *home = getenv("HOME");
-	char buf[1024];
+	char *path = (char *)getenv("HOME");
+	char *buf = vsmk(128);
 	FILE *f;
 	if (!joe_state)
 		return;
-	if (!home)
+	if (!path)
 		return;
-	joe_snprintf_1(stdbuf,stdsiz,"%s/.joe_state",home);
-	f = fopen(stdbuf,"r");
+	path = vsfmt(NULL, 0, "%s/.joe_state", path);
+	f = fopen(path, "r");
 	if(!f)
 		return;
 
 	/* Only read state information if the version is correct */
-	if (fgets(buf,sizeof(buf),f) && !zcmp(buf,STATE_ID)) {
+	if (vsgets(&buf, f) && !zcmp(buf,STATE_ID)) {
 
 		/* Read state information */
-		while(fgets(buf,sizeof(buf),f)) {
-			if(!zcmp(buf,"search\n"))
+		while(vsgets(&buf,f)) {
+			if(!zcmp(buf,"search"))
 				load_srch(f);
-			else if(!zcmp(buf,"macros\n"))
+			else if(!zcmp(buf, "macros"))
 				load_macros(f);
-			else if(!zcmp(buf,"files\n"))
+			else if(!zcmp(buf, "files"))
 				load_hist(f,&filehist);
-			else if(!zcmp(buf,"find\n"))
+			else if(!zcmp(buf, "find"))
 				load_hist(f,&findhist);
-			else if(!zcmp(buf,"replace\n"))
+			else if(!zcmp(buf, "replace"))
 				load_hist(f,&replhist);
-			else if(!zcmp(buf,"run\n"))
+			else if(!zcmp(buf, "run"))
 				load_hist(f,&runhist);
-			else if(!zcmp(buf,"build\n"))
+			else if(!zcmp(buf, "build"))
 				load_hist(f,&buildhist);
-			else if(!zcmp(buf,"grep\n"))
+			else if(!zcmp(buf, "grep"))
 				load_hist(f,&grephist);
-			else if(!zcmp(buf,"cmd\n"))
+			else if(!zcmp(buf, "cmd"))
 				load_hist(f,&cmdhist);
-			else if(!zcmp(buf,"math\n"))
+			else if(!zcmp(buf, "math"))
 				load_hist(f,&mathhist);
-			else if(!zcmp(buf,"yank\n"))
+			else if(!zcmp(buf, "yank"))
 				load_yank(f);
-			else if (!zcmp(buf,"file_pos\n"))
+			else if(!zcmp(buf, "file_pos"))
 				load_file_pos(f);
-			else if (!zcmp(buf,"colors\n"))
+			else if (!zcmp(buf,"colors"))
 				load_colors_state(f);
 			else { /* Unknown... skip until next done */
-				while(fgets(buf,sizeof(buf),f) && zcmp(buf,"done\n"));
+				while(vsgets(&buf,f) && zcmp(buf,"done"));
 			}
 		}
 	}

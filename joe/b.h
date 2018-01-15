@@ -1,4 +1,4 @@
-/*
+ /*
  *	Editor engine
  *	Copyright
  *		(C) 1992 Joseph H. Allen
@@ -100,7 +100,7 @@ struct options {
 	int	picture;	/* Picture mode */
 	int	highlighter_context;	/* Use the context annotations from the highlighter for ^G */
 	int	single_quoted;	/* Ignore '  ' for ^G */
-	int	no_double_quoted;	/* Don't ignore " " for ^G */
+	int	no_double_quoted; /* Don't ignore " " for ^G */
 	int	c_comment;	/* Ignore text in C comments */
 	int	cpp_comment;	/* Ignore text after // comments */
 	int	pound_comment;	/* Ignore text after # comments */
@@ -159,9 +159,6 @@ struct buffer {
 };
 
 extern B bufs;
-
-/* 31744 */
-extern char stdbuf[stdsiz];	/* Convenient global buffer */
 
 extern int force;		/* Set to have final '\n' added to file */
 
@@ -302,11 +299,10 @@ char *brmem(P *p, char *blk, ptrdiff_t size);
 char *brs(P *p, ptrdiff_t size);
 
 /* Copy 'size' bytes from a buffer beginning at p into a variable length string. */
-char *brvs(P *p, ptrdiff_t size);
+char *brvs(char *s, P *p, ptrdiff_t size);
 
-/* Copy line into buffer.  Maximum of size bytes will be copied.  Buffer needs
-   to be one bigger for NIL */
-char *brzs(P *p, char *buf, ptrdiff_t size);
+/* Copy line into variable length string buf. */
+char *brzs(char *buf, P *p);
 
 B *bnext(void);
 B *bafter(B *b);

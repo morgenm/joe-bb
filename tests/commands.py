@@ -195,7 +195,7 @@ class BkwdcTests(joefx.JoeTestBase):
         self.startJoe()
         self.write('hello world')
         self.cmd('bkwdc')
-        self.assertTextAt("Backward to char", x=0)
+        self.assertTextAt("Backward to char", x=0, y=-1)
         self.write('w')
         self.assertCursor(x=6, y=1)
         self.exitJoe()

@@ -105,13 +105,14 @@ static COLORSET *colorset_alloc(void)
 }
 
 /* Like parseident but allows for a '.' in the middle */
-static int parse_scoped_ident(const char **p, char *dest, ptrdiff_t sz)
+static int parse_scoped_ident(const char **p, char **dest)
 {
-	if (!parse_ident(p, dest, sz)) {
+	if (!parse_ident(p, dest)) {
 		if (!parse_char(p, '.')) {
-			ptrdiff_t n = zlen(dest);
-			dest[n++] = '.';
-			if (!parse_ident(p, &dest[n], sz - n)) {
+			char *q = NULL;
+			if (!parse_ident(p, &q)) {
+				*dest = vsadd(*dest, '.');
+				*dest = vscat(*dest, sv(q));
 				return 0;
 			}
 		} else {
@@ -125,7 +126,7 @@ static int parse_scoped_ident(const char **p, char *dest, ptrdiff_t sz)
 /* Parse the color part (spec) of a color def */
 int parse_color_spec(const char **p, struct color_spec *dest)
 {
-	char buf[128];
+	char *buf = vsmk(64);
 	int fg = 1, bg = 0;		/* Next expected */
 	int fg_read = 0, bg_read = 0;	/* Whether it's been specified */
 	int color;
@@ -150,21 +151,20 @@ int parse_color_spec(const char **p, struct color_spec *dest)
 			fg = 0;
 			bg = 1;
 		} else if (!parse_char(p, '$')) {
-			int i;
-			
 			/* GUI color */
 			if (dest->type != COLORSPEC_TYPE_NONE && dest->type != COLORSPEC_TYPE_GUI) {
 				/* Can't mix GUI and term */
 				return 1;
 			}
 			
+			buf = vstrunc(buf, 0);
+			
 			dest->type = COLORSPEC_TYPE_GUI;
-			i = 0;
 			while (**p && ((**p >= 'a' && **p <= 'f') || (**p >= '0' && **p <= '9') || (**p >= 'A' && **p <= 'F'))) {
-				buf[i++] = *((*p)++);
+				buf = vsadd(buf, **p);
+				(*p)++;
 			}
 			
-			buf[i] = 0;
 			color = zhtoi(buf);
 			
 			if (fg && !fg_read) {
@@ -195,7 +195,7 @@ int parse_color_spec(const char **p, struct color_spec *dest)
 			} else {
 				return 1;
 			}
-		} else if (!parse_ident(p, buf, SIZEOF(buf))) {
+		} else if (!parse_ident(p, &buf)) {
 			int dflt = 0;
 			
 			if (!zcmp(buf, "default")) {
@@ -262,7 +262,7 @@ int parse_color_spec(const char **p, struct color_spec *dest)
 /* Parse a color definition for a syntax or builtin color */
 int parse_color_def(const char **p, struct color_def *dest)
 {
-	char buf[256];
+	char *buf = vsmk(32);
 	struct color_ref **last = &dest->refs;
 
 	dest->spec.type = COLORSPEC_TYPE_NONE;
@@ -277,7 +277,7 @@ int parse_color_def(const char **p, struct color_def *dest)
 		}
 
 		if (!parse_char(p, '+')) {
-			if (!parse_scoped_ident(p, buf, SIZEOF(buf))) {
+			if (!parse_scoped_ident(p, &buf)) {
 				struct color_ref *cref = (struct color_ref *) joe_calloc(1, SIZEOF(struct color_ref));
 
 				cref->name = atom_add(buf);
@@ -301,8 +301,8 @@ SCHEME *load_scheme(const char *name)
 	struct color_def **lastdef;
 	struct color_macro *macros = NULL;
 	const char *p;
-	char buf[1024];
-	char bf[256];
+	char *buf = vsmk(256);
+	char *bf = vsmk(64);
 	char *b = NULL;
 	JFILE *f = NULL;
 	int line, i;
@@ -317,16 +317,16 @@ SCHEME *load_scheme(const char *name)
 	/* Find file */
 	p = getenv("HOME");
 	if (p) {
-		joe_snprintf_2(buf, SIZEOF(buf), "%s/.joe/colors/%s.jcf", p, name);
+		buf = vsfmt(buf, 0, "%s/.joe/colors/%s.jcf", p, name);
 		f = jfopen(buf, "r");
 	}
 	
 	if (!f) {
-		joe_snprintf_2(buf, SIZEOF(buf), "%scolors/%s.jcf", JOEDATA, name);
+		buf = vsfmt(buf, 0, "%scolors/%s.jcf", JOEDATA, name);
 		f = jfopen(buf, "r");
 	}
 	if (!f) {
-		joe_snprintf_1(buf, SIZEOF(buf), "*%s.jcf", name);
+		buf = vsfmt(buf, 0, "*%s.jcf", name);
 		f = jfopen(buf, "r");
 	}
 	
@@ -342,7 +342,7 @@ SCHEME *load_scheme(const char *name)
 	curset = 0;
 	line = 0;
 	
-	while (jfgets(buf, SIZEOF(buf), f)) {
+	while (jfgets(&buf, f)) {
 		++line;
 		
 		/* Replace [macros] with their values */
@@ -353,7 +353,7 @@ SCHEME *load_scheme(const char *name)
 		
 		if (!parse_char(&p, '.')) {
 			/* .colors, .set */
-			if (!parse_ident(&p, bf, SIZEOF(bf))) {
+			if (!parse_ident(&p, &bf)) {
 				if (!zcmp(bf, "colors")) {
 					int count = -1;
 					
@@ -376,7 +376,7 @@ SCHEME *load_scheme(const char *name)
 					}
 				} else if (!zcmp(bf, "set")) {
 					parse_ws(&p, '#');
-					if (!parse_ident(&p, bf, SIZEOF(bf))) {
+					if (!parse_ident(&p, &bf)) {
 						struct color_macro *newmacro;
 						const char *q;
 						parse_ws(&p, '#');
@@ -392,7 +392,7 @@ SCHEME *load_scheme(const char *name)
 						/* Add macro */
 						newmacro = joe_malloc(SIZEOF(struct color_macro));
 						newmacro->next = macros;
-						newmacro->name = zdup(bf);
+						newmacro->name = vsdup(bf);
 						newmacro->value = vsncpy(NULL, 0, q, p - q);
 						macros = newmacro;
 					} else {
@@ -408,7 +408,7 @@ SCHEME *load_scheme(const char *name)
 			/* Check a set is selected */
 			logerror_2(joe_gettext(_("%s: %d: Unexpected declaration outside of color block\n")), name, line);
 		} else if (!parse_char(&p, '-')) {
-			if (!parse_ident(&p, bf, SIZEOF(bf))) {
+			if (!parse_ident(&p, &bf)) {
 				if (!zicmp(bf, "term")) {
 					/* -term */
 					int termcolor;
@@ -442,7 +442,7 @@ SCHEME *load_scheme(const char *name)
 			}
 		} else if (!parse_char(&p, '=')) {
 			/* =SyntaxColors */
-			if (!parse_scoped_ident(&p, bf, SIZEOF(bf))) {
+			if (!parse_scoped_ident(&p, &bf)) {
 				struct color_def *cdef;
 				
 				cdef = (struct color_def *) joe_calloc(1, SIZEOF(struct color_def));
@@ -462,14 +462,11 @@ SCHEME *load_scheme(const char *name)
 		}
 	}
 	
-	vsrm(b);
 	jfclose(f);
 	
 	/* Clean up macros */
 	while (macros) {
 		struct color_macro *next = macros->next;
-		joe_free(macros->name);
-		vsrm(macros->value);
 		joe_free(macros);
 		macros = next;
 	}
@@ -1000,10 +997,10 @@ void dump_colors(BW *bw)
 /* Load from joe_state */
 void load_colors_state(FILE *fp)
 {
-	char buf[256];
-	char bf[256];
+	char *buf = vsmk(64);
+	char *bf = vsmk(64);
 	
-	while (fgets(buf, SIZEOF(buf)-1, fp) && zcmp(buf, "done\n")) {
+	while (vsgets(&buf, fp) && zcmp(buf, "done")) {
 		const char *p = buf;
 		ptrdiff_t len;
 		char *term;
@@ -1012,14 +1009,14 @@ void load_colors_state(FILE *fp)
 		
 		/* Key */
 		term = NULL;
-		len = parse_string(&p, bf, SIZEOF(bf));
+		len = parse_string(&p, &bf);
 		if (len <= 0) continue;
 		term = zdup(bf);
 		
 		parse_ws(&p, '#');
 		
 		/* Value */
-		len = parse_string(&p, bf, SIZEOF(bf));
+		len = parse_string(&p, &bf);
 		if (len > 0) {
 			struct color_states *st = joe_malloc(SIZEOF(struct color_states));
 			st->term = term;
@@ -1041,9 +1038,9 @@ void save_colors_state(FILE *fp)
 	for (st = saved_scheme_configs; st; st = st->next) {
 		if (zcmp(myterm, st->term)) {
 			fprintf(fp, "\t");
-			emit_string(fp, st->term, zlen(st->term));
+			emit_string(fp, sz(st->term));
 			fprintf(fp, " ");
-			emit_string(fp, st->scheme, zlen(st->scheme));
+			emit_string(fp, sz(st->scheme));
 			fprintf(fp, "\n");
 		}
 	}
@@ -1051,9 +1048,9 @@ void save_colors_state(FILE *fp)
 	/* Save my scheme */
 	if (scheme_name) {
 		fprintf(fp, "\t");
-		emit_string(fp, myterm, zlen(myterm));
+		emit_string(fp, sz(myterm));
 		fprintf(fp, " ");
-		emit_string(fp, scheme_name, zlen(scheme_name));
+		emit_string(fp, sz(scheme_name));
 		fprintf(fp, "\n");
 	}
 	

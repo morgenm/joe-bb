@@ -25,6 +25,9 @@ struct bw {
 	int	top_changed;	/* Top changed */
 	struct lattr_db *db;	/* line attribute database */
 	int	shell_flag;	/* Cursor should follow shell cursor in this window */
+	char	*prompt;
+	int promptofst;
+	int promptlen;
 };
 
 extern int dspasis;	/* Display characters above 127 as-is */
@@ -46,7 +49,7 @@ void bwins(BW *w, off_t l, off_t n, int flg);
 void bwdel(BW *w, off_t l, off_t n, int flg);
 void bwgen(BW *w, int linums, int linchg);
 void bwgenh(BW *w);
-BW *bwmk(W *window, B *b, int prompt);
+BW *bwmk(W *window, B *b, int prompt, const char *ps);
 void bwmove(BW *w, ptrdiff_t x, ptrdiff_t y);
 void bwresz(BW *w, ptrdiff_t wi, ptrdiff_t he);
 void bwrm(BW *w);
