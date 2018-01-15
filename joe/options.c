@@ -48,7 +48,7 @@ OPTIONS pdefault = {
 	0,		/* french spacing */
 	0,		/* flowed text */
 	0,		/* spaces */
-#ifdef __MSDOS__
+#if defined(__MSDOS__) || defined(JOEWIN)
 	1,		/* crlf */
 #else
 	0,		/* crlf */
@@ -112,7 +112,7 @@ OPTIONS fdefault = {
 	0,		/* french spacing */
 	0,		/* flowed text */
 	0,		/* spaces */
-#ifdef __MSDOS__
+#if defined(__MSDOS__) || defined(JOEWIN)
 	1,		/* crlf */
 #else
 	0,		/* crlf */
@@ -246,7 +246,7 @@ void setopt(B *b, const char *parsed_name)
 	for (o = options_list; o; o = o->next) {
 		struct options_match *match;
 		for (match = o->match; match; match = match->next) {
-			if (rmatch(match->name_regex, parsed_name)) {
+			if (rmatch(match->name_regex, parsed_name, 0)) {
 				if(match->contents_regex) {
 					P *p = pdup(b->bof, "setopt");
 					if (!match->r_contents_regex)
@@ -878,7 +878,11 @@ char **find_configs(char **ary, const char *extension, const char *datadir, cons
 		/* Load from home directory. */
 		p = getenv("HOME");
 		if (p) {
+#ifndef JOEWIN
 			buf = vsfmt(buf, 0, "%s/.joe/%s", p, homedir);
+#else
+			buf = vsfmt(buf, 0, "%s\\%s", p, homedir);
+#endif
 
 			if (!chpwd(buf) && (t = rexpnd(wildcard))) {
 				for (x = 0; x < valen(t); ++x) {
@@ -933,11 +937,16 @@ char **colorfiles = NULL; /* Array of available color schemes */
 
 static int colorscmplt(BW *bw, int k)
 {
+	return simple_cmplt(bw, get_colors());
+}
+
+char **get_colors(void)
+{
 	if (!colorfiles) {
 		colorfiles = find_configs(NULL, "jcf", "colors", "colors");
 	}
-	
-	return simple_cmplt(bw, colorfiles);
+
+	return colorfiles;
 }
 
 static int check_for_hex(BW *bw)
@@ -1260,6 +1269,7 @@ static int olddoopt(BW *bw, int y, int flg)
 					return -1;
 				}
 			} case 17: {
+				/* Color scheme */
 				buf = vsfmt(buf, 0, joe_gettext(glopts[y].yes), "");
 				s = ask(bw->parent, buf, NULL, NULL, colorscmplt, utf8_map, 0, 0, NULL);
 				if (s) {
@@ -1271,6 +1281,10 @@ static int olddoopt(BW *bw, int y, int flg)
 							return -1;
 						} else {
 							nredraw(maint->t);
+#ifdef JOEWIN
+							/* Notify UI */
+							jwSendComm0s(JW_FROM_EDITOR, COMM_ACTIVESCHEME, scheme_name);
+#endif
 							return 0;
 						}
 					} else {

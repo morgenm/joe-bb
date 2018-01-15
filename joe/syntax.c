@@ -609,7 +609,6 @@ static struct high_param *parse_params(struct high_param *current_params,const c
 	return params;
 }
 
-
 struct high_syntax *load_syntax_subr(const char *name,char *subr,struct high_param *params);
 
 /* Parse options */
@@ -664,7 +663,7 @@ static int parse_options(struct high_syntax *syntax,struct high_cmd *cmd,JFILE *
 		} else if(!parsing_strings && (!zcmp(bf,"strings") || !zcmp(bf,"istrings"))) {
 			if (bf[0]=='i')
 				cmd->ignore = 1;
-			while(jfgets(&buf,f)) {
+			while(jfgets(&buf, f)) {
 				++line;
 				p = buf;
 				parse_ws(&p,'#');
@@ -739,25 +738,31 @@ static struct high_state *load_dfa(struct high_syntax *syntax)
 	/* Load it */
 	p = getenv("HOME");
 	if (p) {
+#ifndef JOEWIN
 		name = vsfmt(name, 0, "%s/.joe/syntax/%s.jsf",p,syntax->name);
-		f = jfopen(name,"r");
+#else
+		name = vsfmt(name, 0, "%s\\syntax\\%s.jsf", p, syntax->name);
+#endif
+		f = jfopen(name, "r");
 	}
 
 	if (!f) {
 		name = vsfmt(name, 0, "%ssyntax/%s.jsf",JOEDATA,syntax->name);
-		f = jfopen(name,"r");
+		f = jfopen(name, "r");
 	}
+
 	if (!f) {
 		name = vsfmt(name, 0, "*%s.jsf",syntax->name);
-		f = jfopen(name,"r");
+		f = jfopen(name, "r");
 	}
+
 	if (!f) {
 		obj_free(name);
 		return 0;
 	}
 
 	/* Parse file */
-	while(jfgets(&buf,f)) {
+	while (jfgets(&buf, f)) {
 		++line;
 		p = buf;
 		c = parse_ws(&p,'#');

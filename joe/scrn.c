@@ -1868,6 +1868,7 @@ void nescape(SCRN *t)
 	npartial(t);
 	cpos(t, 0, t->li - 1);
 	eraeol(t, 0, t->li - 1, 0);
+	ttflsh();
 	if (t->bre)
 		texec(t->cap, t->bre, 1, 0, 0, 0, 0);
 	if (t->te)
@@ -1884,6 +1885,7 @@ void nreturn(SCRN *t)
 	if (t->brp)
 		texec(t->cap, t->brp, 1, 0, 0, 0, 0);
 	nredraw(t);
+	ttflsh();
 }
 
 void nclose(SCRN *t)
