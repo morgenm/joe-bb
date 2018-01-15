@@ -240,19 +240,23 @@ int procrc(CAP *cap, char *name)
 							char *bf = 0;
 							char *p = getenv("HOME");
 							int rtn = -1;
-							if (p && buf[x] != '/') {
+							if (p && !ISDIRSEP(buf[x])) {
+#ifndef JOEWIN
 								bf = vsfmt(bf, 0, "%s/.joe/%s", p, buf + x);
+#else
+								bf = vsfmt(bf, 0, "%s\\%s", p, buf + x);
+#endif
 								rtn = procrc(cap, bf);
 							}
-							if (rtn == -1 && buf[x] != '/') {
+							if (rtn == -1 && !ISDIRSEP(buf[x])) {
 								bf = vsfmt(bf, 0, "%s%s", JOERC, buf + x);
 								rtn = procrc(cap, bf);
 							}
-							if (rtn == -1 && buf[x] != '/') {
+							if (rtn == -1 && !ISDIRSEP(buf[x])) {
 								bf = vsfmt(bf, 0, "*%s", buf + x);
 								rtn = procrc(cap, bf);
 							}
-							if (rtn == -1 && buf[x] == '/') {
+							if (rtn == -1 && !ISDIRSEP(buf[x])) {
 								bf = vsfmt(bf, 0, "%s", buf + x);
 								rtn = procrc(cap, bf);
 							}

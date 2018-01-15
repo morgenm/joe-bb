@@ -184,13 +184,12 @@ static void cdata(void *obj, char *dat, ptrdiff_t siz)
 		prm(r);
 		prm(q);
 		cfollow(b, NULL, b->eof->byte);
-		undomark();
 	}
 }
 
 int cstart(BW *bw, const char *name, char **s, void *obj, int build, int out_only, const char *first_command, int vt)
 {
-#ifdef __MSDOS__
+#if defined(__MSDOS__)
 	varm(s);
 	msgnw(bw->parent, joe_gettext(_("Sorry, no sub-processes in DOS (yet)")));
 	return -1;
@@ -224,7 +223,7 @@ int cstart(BW *bw, const char *name, char **s, void *obj, int build, int out_onl
 
 	/* p_goto_eof(bw->cursor); */
 
-	if (!(m = mpxmk(&bw->b->out, name, s, cdata, bw->b, build ? cdone_parse : cdone, bw->b, out_only, shell_w, shell_h))) {
+	if (!(m = mpxmk(&bw->b->out, name, s, cdata, bw->b, build ? cdone_parse : cdone, bw->b, out_only, vt, shell_w, shell_h))) {
 		varm(s);
 		msgnw(bw->parent, joe_gettext(_("No ptys available")));
 		return -1;
@@ -243,8 +242,10 @@ static int dobknd(BW *bw, int vt)
 	char **a;
 	char *s;
 	const char *sh;
+#ifndef JOEWIN
 	const char start_sh[] = ". " JOERC "shell.sh\n";
 	const char start_csh[] = "source " JOERC "shell.csh\n";
+#endif
 
         if (!modify_logic(bw,bw->b))
         	return -1;
@@ -264,9 +265,41 @@ static int dobknd(BW *bw, int vt)
 	vaperm(a);
 	s = vsncpy(NULL, 0, sz(sh));
 	a = vaadd(a, s);
+#ifndef JOEWIN
 	s = vsncpy(NULL, 0, sc("-i"));
 	a = vaadd(a, s);
 	return cstart(bw, sh, a, NULL, 0, 0, (vt ? (zstr(sh, "csh") ? start_csh : start_sh) : NULL), vt);
+#else
+	if (vt) {
+		unsigned char *vtbat;
+		struct stat stbuf;
+
+		vtbat = vsfmt(NULL, 0, "%s/vt/vt.bat", getenv("HOME"));
+		if (stat(vtbat, &stbuf)) {
+			/* File does not exist */
+			vtbat = vsfmt(NULL, 0, "%s/vt/vt.bat", JOEDATA);
+			if (stat(vtbat, &stbuf)) {
+				/* File does not exist either... */
+				vtbat = NULL;
+			}
+		}
+
+		if (vtbat) {
+			/* Found */
+			s = vsncpy(NULL, 0, sc("/C"));
+			a = vaadd(a, s);
+			a = vaadd(a, vtbat);
+		} else {
+			/* Not found; fallback on dumb terminal */
+			s = vsncpy(NULL, 0, sc("/Q"));
+			a = vaadd(a, s);
+		}
+	} else {
+		s = vsncpy(NULL, 0, sc("/Q"));
+		a = vaadd(a, s);
+	}
+	return cstart(bw, sh, a, NULL, 0, 0, NULL, vt);
+#endif
 }
 
 /* Start ANSI shell */
@@ -295,6 +328,30 @@ int ubknd(W *w, int k)
 	return dobknd(bw, 0);
 }
 
+/* Get the shell and command line argument to execute another program */
+
+static char **getshell()
+{
+	char **a;
+	char *cmd;
+
+	a = vamk(10);
+	
+#ifndef JOEWIN
+	cmd = vsncpy(NULL, 0, sc("/bin/sh"));
+	a = vaadd(a, cmd);
+	cmd = vsncpy(NULL, 0, sc("-c"));
+	a = vaadd(a, cmd);
+#else
+	cmd = vsncpy(NULL, 0, sz(getenv("SHELL")));
+	a = vaadd(a, cmd);
+	cmd = vsncpy(NULL, 0, sc("/C"));
+	a = vaadd(a, cmd);
+#endif
+
+	return a;
+}
+
 /* Run a program in a window */
 
 B *runhist = NULL;
@@ -310,18 +367,12 @@ int urun(W *w, int k)
 
 	if (s) {
 		char **a;
-		char *cmd;
 		if (!modify_logic(bw,bw->b))
 			return -1;
 
-		a = vamk(10);
-		cmd = vsncpy(NULL, 0, sc("/bin/sh"));
-
-		a = vaadd(a, cmd);
-		cmd = vsncpy(NULL, 0, sc("-c"));
-		a = vaadd(a, cmd);
+		a = getshell();
 		a = vaadd(a, s);
-		return cstart(bw, "/bin/sh", a, NULL, 0, 0, NULL, 0);
+		return cstart(bw, a[0], a, NULL, 0, 0, NULL, 0);
 	} else {
 		return -1;
 	}
@@ -346,19 +397,17 @@ int ubuild(W *w, int k)
 	/* "file prompt" was set for this... */
 	s = ask(w, s, &buildhist, "Run", cmplt_command, locale_map, PWFLAG_COMMAND, prev, NULL);
 	if (s) {
-		char **a = vamk(10);
-		char *cmd = vsncpy(NULL, 0, sc("/bin/sh"));
+		char **a;
 		char *t = NULL;
-
 
 		bw->b->o.ansi = 1;
 		bw->b->o.syntax = load_syntax("ansi");
 		/* Turn on shell mode for each window */
 		ansiall(bw->b);
 
-		a = vaadd(a, cmd);
-		cmd = vsncpy(NULL, 0, sc("-c"));
-		a = vaadd(a, cmd);
+		a = getshell();
+		a = vaadd(a, vsncpy(NULL, 0, sv(s)));
+#ifndef JOEWIN
 		if (bw->b->current_dir && bw->b->current_dir[0]) {
 			// Change directory before we run
 			t = vsncpy(sv(t), sc("cd '"));
@@ -369,7 +418,8 @@ int ubuild(W *w, int k)
 		t = vsncpy(sv(t), sv(s));
 		t = vsncpy(sv(t), sc("); then echo \"\nJOE: [32mPASS[0m (exit status = $?)\n\"; else echo \"\nJOE: [31mFAIL[0m (exit status = $?)\n\"; fi"));
 		a = vaadd(a, t);
-		return cstart(bw, "/bin/sh", a, NULL, 1, 0, NULL, 0);
+#endif
+		return cstart(bw, a[0], a, NULL, 1, 0, NULL, 0);
 	} else {
 		return -1;
 	}
@@ -394,14 +444,11 @@ int ugrep(W *w, int k)
 	/* "file prompt" was set for this... */
 	s = ask(w, prompt, &grephist, "Run", cmplt_command, locale_map, PWFLAG_COMMAND, prev, NULL);
 	if (s) {
-		char **a = vamk(10);
-		char *cmd = vsncpy(NULL, 0, sc("/bin/sh"));
+		char **a;
 
-		a = vaadd(a, cmd);
-		cmd = vsncpy(NULL, 0, sc("-c"));
-		a = vaadd(a, cmd);
+		a = getshell();
 		a = vaadd(a, s);
-		return cstart(bw, "/bin/sh", a, NULL, 1, 0, NULL, 0);
+		return cstart(bw, a[0], a, NULL, 1, 0, NULL, 0);
 	} else {
 		return -1;
 	}
@@ -416,7 +463,7 @@ int ukillpid(W *w, int k)
 	if (bw->b->pid) {
 		int c = query(w, sz(joe_gettext(_("Kill program (y,n,%{abort})?"))), 0);
 		if (bw->b->pid && (c == YES_CODE || yncheck(yes_key, c)))
-			kill(bw->b->pid, 1);
+			killmpx(bw->b->pid, 1);
 		return -1;
 	} else {
 		return 0;

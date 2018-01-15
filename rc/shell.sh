@@ -1,5 +1,26 @@
 # Aliases for sh/dash/ash/bash/ksh/zsh in JOE shell window
 
+if [ -n "$JOEWIN" ]; then
+	# Read initial size of terminal from environment.
+	stty -F /dev/tty rows $LINES cols $COLUMNS
+
+	# Continually update terminal size from JOE's named pipe.
+	if [ -x "$(cygpath "$JOEDATA/vt/joewinpty.exe")" ]; then
+		PTYHELPER=$(cygpath "$JOEDATA/vt/joewinpty.exe")
+	fi
+	if [ -x "$(cygpath "$JOEHOME/vt/joewinpty.exe")" ]; then
+		PTYHELPER=$(cygpath "$JOEHOME/vt/joewinpty.exe")
+	fi
+	if [ -n "$PTYHELPER" ]; then
+		"$PTYHELPER" winsize | sh -c "while read w h ; do stty -F /dev/tty rows \$h cols \$w ; done" &
+		trap 'jobs -p | xargs kill' EXIT
+	fi
+	
+	if [ -n "$CURPATH" ]; then
+		cd "$CURPATH"
+	fi
+fi
+
 joehelp () {
 	echo "clear         - erase buffer"
 	echo "joe           - edit file"
@@ -73,7 +94,11 @@ joe_math () {
 
 # Edit a file
 joe_edit () {
-	echo -n '{'shell_edit,'"'$1'"',shell_rtn'}'
+	if [ -n "$JOEWIN" ] && [ "$OSTYPE" == "cygwin" ]; then
+		echo -n '{'shell_edit,shell_dellin!,'"'$(cygpath -aw $1 | sed 's/\\/\//g')'"',shell_rtn'}'
+	else
+		echo -n '{'shell_edit,'"'$1'"',shell_rtn'}'
+	fi
 }
 
 # Pop shell window
@@ -94,7 +119,11 @@ joe_cd () {
 		cd "$1"
 	fi
 	# Tell JOE our new directory
-	echo -n '{'shell_cd,shell_dellin!,'"'`pwd`/'"',shell_rtn'}'
+	if [ -n "$JOEWIN" ] && [ "$OSTYPE" == "cygwin" ]; then
+		echo -n '{'shell_cd,shell_dellin!,'"'$(cygpath -aw . |sed 's/\\/\//g')'"',shell_rtn'}'
+	else
+		echo -n '{'shell_cd,shell_dellin!,'"'`pwd`/'"',shell_rtn'}'
+	fi
 }
 
 alias clear=joe_clear
