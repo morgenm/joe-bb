@@ -3,7 +3,9 @@
  *	Copyright
  *		(C) 1992 Joseph H. Allen
  *
- *	This file is part of JOE (Joe's Own Editor)
+ * 	This file is part of Joe-bb (Joe with better backups)
+ *	This file has been modified from the original JOE source code on:
+ *		6/22/2019
  */
 #include "types.h"
 
