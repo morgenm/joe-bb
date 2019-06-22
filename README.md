@@ -1,4 +1,4 @@
-#Joe-betterbackups
+# Joe-betterbackups
 
 <p>Joe-betterbackups is a fork of Joe's Own Editor which adds a
 better system for backing up files. Joe-bb is distributed under
