@@ -509,7 +509,7 @@ int main(int argc, char **real_argv, const char * const *envv)
 
 	for (c = 1; argv[c]; ++c) {
 		if (!strcmp(argv[c], "-help") || !strcmp(argv[c], "--help")) {
-			printf("Joe's Own Editor v%s\n\n", VERSION);
+			printf("Joe-betterbackups v%s\n\n", VERSION);
 			printf("Usage: %s [global-options] [ [local-options] filename ]...\n\n", argv[0]);
 			printf("Global options:\n");
 			cmd_help(0);
@@ -671,7 +671,7 @@ int main(int argc, char **real_argv, const char * const *envv)
 			xmsg = stagen(NULL, (BW *)(lastw(maint)->object), joe_gettext(xmsg), ' ');
 			msgnw(((BASE *)lastw(maint)->object)->parent, xmsg);
 		} else {
-			joe_snprintf_3(msgbuf,JOE_MSGBUFSIZE,joe_gettext(_("\\i** Joe's Own Editor v%s ** (%s) ** Copyright %s 2015 **\\i")),VERSION,locale_map->name,(locale_map->type ? "©" : "(C)"));
+			joe_snprintf_3(msgbuf,JOE_MSGBUFSIZE,joe_gettext(_("\\i** Joe-betterbackups v%s ** (%s) ** Copyright %s 2015 **\\i")),VERSION,locale_map->name,(locale_map->type ? "©" : "(C)"));
 			msgnw(((BASE *)lastw(maint)->object)->parent, msgbuf);
 		}
 

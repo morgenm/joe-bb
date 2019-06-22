@@ -1,4 +1,12 @@
-/* Built-in files */
+/* 	Built-in files
+ *	Copyright
+ * 		(C) 2019 Morgen Malinoski
+ *
+ * 	This file is part of Joe-bb (Joe with better backups)
+ *	This file has been modified from the original JOE source code on:
+ *		6/22/2019
+ */
+
 
 /* Generated with: stringify ../rc/joerc ../rc/ftyperc ../syntax/c.jsf ../colors/default.jcf ../syntax/comment_todo.jsf ../syntax/filename.jsf ../syntax/context.jsf */
 
@@ -27,7 +35,7 @@ const char *builtins[]=
 		"-rmsg  %S Row %4r Col %3c \n"
 		"-smsg ** Line %r Col %c Offset %o(0x%O) %e %a(0x%A) Width %w ** \n"
 		"-zmsg ** Line %r Col %c Offset %o(0x%O) ** \n"
-		"-xmsg \\i Joe's Own Editor %v (%b) ** Type \\bCtrl-K Q\\b to exit or \\bCtrl-K H\\b for help **\\i\n"
+		"-xmsg \\i Joe-betterbackups %v (%b) ** Type \\bCtrl-K Q\\b to exit or \\bCtrl-K H\\b for help **\\i\n"
 		"-aborthint ^C\n"
 		"-helphint ^K H\n"
 		"-highlight\n"
